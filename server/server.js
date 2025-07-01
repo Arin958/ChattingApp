@@ -26,12 +26,28 @@ const io = new Server(server, {
 connectDB();
 
 // Middleware
+const allowedOrigins = [
+  process.env.CLIENT_URL || "http://localhost:5173",
+  "https://chatting-app-dusky.vercel.app",
+];
+// Add preview Vercel URLs dynamically using RegExp
 app.use(
   cors({
-    origin: process.env.CLIENT_URL,
+    origin: function (origin, callback) {
+      if (
+        !origin ||
+        allowedOrigins.includes(origin) ||
+        /\.vercel\.app$/.test(origin) // Allow all *.vercel.app preview URLs
+      ) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by CORS: " + origin));
+      }
+    },
     credentials: true,
   })
 );
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
