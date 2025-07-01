@@ -5,7 +5,7 @@ const cookieParser = require("cookie-parser");
 const http = require("http");
 const { Server } = require("socket.io");
 const jwt = require("jsonwebtoken");
-const cookie = require("cookie"); // ✅ Correct parser for socket headers
+const cookie = require("cookie");
 
 const connectDB = require("./config/db");
 const authRoutes = require("./routes/auth/authRoutes");
@@ -14,60 +14,63 @@ const chatRoutes = require("./routes/chat/chatRoutes");
 const userRoutes = require("./routes/user/userRoutes");
 
 const app = express();
-const server = http.createServer(app); // for socket.io
-const io = new Server(server, {
-  cors: {
-    origin: process.env.CLIENT_URL, // Your Vite frontend
-    credentials: true,
-  },
-});
+const server = http.createServer(app);
 
-// Connect to MongoDB
-connectDB();
-
-// Middleware
+// Shared CORS origin checker
 const allowedOrigins = [
   process.env.CLIENT_URL || "http://localhost:5173",
   "https://chatting-app-dusky.vercel.app",
 ];
-// Add preview Vercel URLs dynamically using RegExp
+
+const isOriginAllowed = (origin) => {
+  return (
+    !origin ||
+    allowedOrigins.includes(origin) ||
+    /\.vercel\.app$/.test(origin)
+  );
+};
+
+// CORS for Express
 app.use(
   cors({
     origin: function (origin, callback) {
-      if (
-        !origin ||
-        allowedOrigins.includes(origin) ||
-        /\.vercel\.app$/.test(origin) // Allow all *.vercel.app preview URLs
-      ) {
-        callback(null, true);
-      } else {
-        callback(new Error("Not allowed by CORS: " + origin));
-      }
+      if (isOriginAllowed(origin)) callback(null, true);
+      else callback(new Error("Not allowed by CORS: " + origin));
     },
     credentials: true,
   })
 );
 
+// Express middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
-// Routes
+// API routes
 app.use("/api/auth", authRoutes);
 app.use("/api/chat", chatRoutes);
 app.use("/api/get-users", userRoutes);
 
+// Socket.IO CORS config
+const io = new Server(server, {
+  cors: {
+    origin: function (origin, callback) {
+      if (isOriginAllowed(origin)) callback(null, true);
+      else callback(new Error("Not allowed by Socket.IO CORS: " + origin));
+    },
+    credentials: true,
+  },
+});
 
+// Connect MongoDB
+connectDB();
 
-// ================= SOCKET.IO SETUP ================= //
+// Socket.IO authentication middleware
 io.use(async (socket, next) => {
   try {
     const cookies = cookie.parse(socket.handshake.headers.cookie || "");
-    const token = cookies.token; // replace with your actual cookie name
-
-    if (!token) {
-      return next(new Error("No token provided"));
-    }
+    const token = cookies.token;
+    if (!token) return next(new Error("No token provided"));
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     socket.user = decoded;
@@ -78,78 +81,52 @@ io.use(async (socket, next) => {
   }
 });
 
-// Add this at the top level of your server file (with other requires)
-const userSocketMap = new Map(); // In-memory store for user-socket mapping
+// In-memory user-socket map
+const userSocketMap = new Map();
 
-// Then modify your connection handler:
 io.on("connection", async (socket) => {
   const userId = socket.user.id;
-
-  // Update in-memory map
   userSocketMap.set(userId, socket.id);
 
-  // Update user's status and socketId in DB
   await User.findByIdAndUpdate(userId, {
     socketId: socket.id,
     status: "online",
-    lastSeen: null
+    lastSeen: null,
   });
 
-  // Get all online users
-  const onlineUsers = await User.find({ status: 'online' }).select('_id');
-  const onlineUserIds = onlineUsers.map(user => user._id.toString());
+  const onlineUsers = await User.find({ status: "online" }).select("_id");
+  io.emit("online-users", onlineUsers.map((u) => u._id.toString()));
 
-  // Notify all clients about the current online users
-  io.emit('online-users', onlineUserIds);
-
-  console.log(`🟢 User connected: ${userId} (${socket.id}) | Total connected: ${userSocketMap.size}`);
-
-  // Online users request handler
-  socket.on('get-online-users', async () => {
-    const onlineUsers = await User.find({ status: 'online' }).select('_id');
-    const onlineUserIds = onlineUsers.map(user => user._id.toString());
-    socket.emit('online-users', onlineUserIds);
+  socket.on("get-online-users", async () => {
+    const online = await User.find({ status: "online" }).select("_id");
+    socket.emit("online-users", online.map((u) => u._id.toString()));
   });
 
-  // Typing indicator handlers
-  socket.on('typing', (receiverId) => {
-    if (!socket.user?.id) return;
-    
+  socket.on("typing", (receiverId) => {
     const receiverSocketId = userSocketMap.get(receiverId);
     if (receiverSocketId) {
-      
-      io.to(receiverSocketId).emit('typing', socket.user.id);
-    } else {
-      console.log(`[Typing] Receiver ${receiverId} not connected`);
+      io.to(receiverSocketId).emit("typing", userId);
     }
   });
 
-  socket.on('stopTyping', (receiverId) => {
-    if (!socket.user?.id) return;
-    
+  socket.on("stopTyping", (receiverId) => {
     const receiverSocketId = userSocketMap.get(receiverId);
     if (receiverSocketId) {
-     
-      io.to(receiverSocketId).emit('stopTyping', socket.user.id);
+      io.to(receiverSocketId).emit("stopTyping", userId);
     }
   });
 
   socket.on("disconnect", async () => {
-    // Remove from in-memory map
     userSocketMap.delete(userId);
-    
     await User.findByIdAndUpdate(userId, {
       status: "offline",
       lastSeen: new Date(),
-      socketId: null
+      socketId: null,
     });
-
-    // Notify all clients that this user went offline
-    socket.broadcast.emit('user-offline', userId);
-    console.log(`🔴 User disconnected: ${userId} | Remaining connections: ${userSocketMap.size}`);
+    socket.broadcast.emit("user-offline", userId);
   });
 });
-// Make io accessible from other files (optional)
+
 app.set("io", io);
 
 // Start server
