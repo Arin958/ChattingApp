@@ -11,7 +11,6 @@ const upload = require("../../middleware/upload");
 
 const chatRoutes = express.Router();
 
-chatRoutes.get("/chat-list", verifyToken, getChatList);
 chatRoutes.post("/", verifyToken, upload.single("file"), sendMessage);
 chatRoutes.get("/:userId", verifyToken, getConversation);
 chatRoutes.delete("/:messageId", verifyToken, deleteMessage);
