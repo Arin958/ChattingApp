@@ -9,9 +9,8 @@ const mongoose = require("mongoose");
 
 
 // @desc    Send a new message
-// @route   POST /api/messages
+// @route   POST /api/chat
 // @access  Private
-
 exports.sendMessage = async (req, res) => {
   try {
     const { receiver, content = "", type = "text" } = req.body; // Make content optional with default
@@ -87,7 +86,7 @@ exports.sendMessage = async (req, res) => {
   }
 };
 // @desc    Get conversation between two users
-// @route   GET /api/messages/:userId
+// @route   GET /api/chat/:userId
 // @access  Private
 exports.getConversation = async (req, res) => {
   try {
@@ -150,7 +149,7 @@ exports.getConversation = async (req, res) => {
 };
 
 // @desc    Delete a message
-// @route   DELETE /api/messages/:messageId
+// @route   DELETE /api/chat/:messageId
 // @access  Private
 exports.deleteMessage = async (req, res) => {
   try {
@@ -197,7 +196,7 @@ exports.deleteMessage = async (req, res) => {
 };
 
 // @desc    Mark messages as seen
-// @route   PUT /api/messages/mark-seen
+// @route   PUT /api/chat/mark-seen
 // @access  Private
 exports.markMessagesAsSeen = async (req, res) => {
   try {
@@ -240,6 +239,49 @@ exports.markMessagesAsSeen = async (req, res) => {
       messageId: message._id,
       seenAt: message.seenAt,
     });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+// @desc    Edit a message
+// @route   PUT /api/chat/:messageId
+// @access  Private
+exports.editMessage = async (req, res) => {
+  try {
+    const { messageId } = req.params;
+    const { newContent } = req.body;
+    const userId = req.user.id;
+
+    const message = await Message.findById(messageId);
+    if (!message) {
+      return res.status(404).json({ message: "Message not found" });
+    }
+
+    // Only sender can edit the message
+    if (!message.sender.equals(userId)) {
+      return res.status(403).json({ message: "Not authorized" });
+    }
+
+    // Update message content and mark as edited
+    message.content = newContent;
+    message.edited = true;
+    await message.save();
+
+    // Notify other user via socket if online
+    const otherUserId = message.receiver;
+    const otherUser = await User.findById(otherUserId);
+    const io = req.app.get("io");
+
+    if (otherUser?.socketId) {
+      io.to(otherUser.socketId).emit("messageEdited", {
+        messageId,
+        newContent,
+      });
+    }
+
+    res.json(message);
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Server error" });

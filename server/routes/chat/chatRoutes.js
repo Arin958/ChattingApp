@@ -6,6 +6,7 @@ const {
   deleteMessage,
   markMessagesAsSeen,
   getChatList,
+  editMessage,
 } = require("../../controller/chat/chatController");
 const upload = require("../../middleware/upload");
 
@@ -15,5 +16,6 @@ chatRoutes.post("/", verifyToken, upload.single("file"), sendMessage);
 chatRoutes.get("/:userId", verifyToken, getConversation);
 chatRoutes.delete("/:messageId", verifyToken, deleteMessage);
 chatRoutes.put("/seen/:messageId", verifyToken, markMessagesAsSeen);
+chatRoutes.put("/edit-message/:messageId", verifyToken, editMessage);
 
 module.exports = chatRoutes;
