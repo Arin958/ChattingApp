@@ -6,17 +6,25 @@ import {
   sendMessage,
   editMessage,
   markMessagesAsSeen,
+  addSocketMessage,
+  updateMessage,
 } from "../Store/message/messageSlice";
 
 export const useMessageHandlers = (userId, currentChat, API) => {
   const dispatch = useDispatch();
   const [newMessage, setNewMessage] = useState("");
   const [isUploading, setIsUploading] = useState(false);
+  const [sendError, setSendError] = useState(null);
 
   const handleSendMessage = useCallback(
     async (e, selectedFile) => {
       e.preventDefault();
-      if ((!newMessage.trim() && !selectedFile) || !currentChat?._id) return;
+      setSendError(null);
+      
+      if ((!newMessage.trim() && !selectedFile) || !currentChat?._id) {
+        setSendError("Message cannot be empty");
+        return false;
+      }
 
       try {
         setIsUploading(true);
@@ -25,68 +33,104 @@ export const useMessageHandlers = (userId, currentChat, API) => {
         if (newMessage.trim()) formData.append("content", newMessage);
         if (selectedFile) formData.append("file", selectedFile);
 
-        await dispatch(sendMessage(formData)).unwrap();
+        // Make the API call directly to get the full response
+        const response = await axios.post(`${API}/api/chat`, formData, {
+          withCredentials: true,
+          headers: {
+            'Content-Type': 'multipart/form-data',
+          },
+        });
 
+        // Dispatch the action with the complete message data
+        dispatch(addSocketMessage(response.data));
+        
         setNewMessage("");
-        return true; // Indicate success
+        return response.data; // Return the complete message object
       } catch (err) {
-        console.error("Failed to send message:", err);
+        const errorMsg = err.response?.data?.message || "Failed to send message";
+        console.error("Send message error:", errorMsg);
+        setSendError(errorMsg);
         return false;
       } finally {
         setIsUploading(false);
       }
     },
-    [newMessage, currentChat?._id, dispatch]
+    [newMessage, currentChat?._id, dispatch, API]
   );
 
   const onMessageChange = useCallback((e) => {
     setNewMessage(e.target.value);
-    // Note: Typing emission is now handled in the component
+    setSendError(null);
   }, []);
 
-  //   const handleTyping = useCallback(
-  //     debounce((text, socket) => {
-  //       if (!userId) return;
-  //       if (text.trim()) {
-  //         socket.emit('typing', userId);
-  //       } else {
-  //         socket.emit('stopTyping', userId);
-  //       }
-  //     }, 500),
-  //     [userId]
-  //   );
-
-  const handleDeleteMessage = useCallback(
-    async (messageId) => {
-      try {
-        await axios.delete(`${API}/api/chat/${messageId}`, {
-          withCredentials: true,
+ const handleDeleteMessage = useCallback(async (messageId) => {
+    try {
+        const response = await axios.delete(`${API}/api/chat/${messageId}`, {
+            withCredentials: true,
         });
-        return true;
-      } catch (err) {
-        console.error("Failed to delete message:", err);
-        return false;
-      }
-    },
-    [API]
-  );
+        
+        if (response.data.success) {
+            // Update the local state with the deleted message
+            dispatch(updateMessage({
+                id: messageId,
+                changes: {
+                    deleted: true,
+                    content: "This message was deleted",
+                    deletedBy: response.data.deletedMessage?.deletedBy || userId
+                }
+            }));
+            
+            return {
+                success: true,
+                message: "Message deleted successfully"
+            };
+        } else {
+            throw new Error(response.data.error || "Failed to delete message");
+        }
+    } catch (err) {
+        console.error("Delete message error:", err.message);
+        return {
+            success: false,
+            error: err.message
+        };
+    }
+}, [API, dispatch]);
 
   const handleEditMessage = useCallback(
     async (messageId, newContent) => {
       try {
-        await dispatch(editMessage({ messageId, newContent })).unwrap();
-        return true;
+        const response = await axios.put(
+          `${API}/api/chat/edit-message/${messageId}`,
+          { newContent },
+          { withCredentials: true }
+        );
+        
+        dispatch(editMessage({ 
+          messageId, 
+          newContent,
+          updatedAt: response.data.updatedAt 
+        }));
+        
+        return {
+          success: true,
+          updatedMessage: response.data
+        };
       } catch (err) {
-        console.error("Failed to edit message:", err);
-        return false;
+        const errorMsg = err.response?.data?.message || "Failed to edit message";
+        console.error("Edit message error:", errorMsg);
+        return {
+          success: false,
+          error: errorMsg
+        };
       }
     },
-    [dispatch]
+    [dispatch, API]
   );
 
   return {
     newMessage,
     isUploading,
+    sendError,
     setNewMessage,
     handleSendMessage,
     onMessageChange,

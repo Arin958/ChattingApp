@@ -24,28 +24,10 @@ const MessageBubble = ({
 
   if (message.deleted) {
     return (
-      <div
-        ref={bubbleRef}
-        data-message-id={message._id}
-        className={`flex max-w-xs md:max-w-md lg:max-w-lg px-4 py-2 rounded-2xl italic text-gray-500 ${
-          isCurrentUser
-            ? 'bg-gray-100 rounded-tr-none'
-            : 'bg-gray-100 rounded-tl-none'
-        }`}
-      >
-        <div className="flex-1">
-          {!isCurrentUser && (
-            <span className="font-semibold text-xs block -mt-1 mb-1 not-italic">
-              {message.sender.username}
-            </span>
-          )}
-          <p className="break-words">This message was deleted</p>
-        </div>
-        <div className="flex items-end pl-2 space-x-1">
-          <span className="text-xs opacity-70">
-            {format(new Date(message.createdAt), 'h:mm a')}
-          </span>
-        </div>
+      <div className={`italic text-gray-500 p-2 rounded-lg ${
+        isCurrentUser ? 'bg-gray-100' : 'bg-gray-100'
+      }`}>
+        This message was deleted
       </div>
     );
   }

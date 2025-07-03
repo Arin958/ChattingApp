@@ -53,12 +53,32 @@ const ChatList = () => {
       );
     };
 
+    const handleDeletedMessage = ({ messageId }) => {
+      setUsers((prevUsers) =>
+        prevUsers.map((user) => {
+          if (user.latestMessage?._id === messageId) {
+            return {
+              ...user,
+              latestMessage: {
+                ...user.latestMessage,
+                content: "Message deleted",
+                deleted: true
+              }
+            };
+          }
+          return user;
+        })
+      );
+    };
+
     socket.on("newMessage", handleNewMessage);
     socket.on("messagesSeen", handleSeenMessages);
+    socket.on("messageDeleted", handleDeletedMessage);
 
     return () => {
       socket.off("newMessage", handleNewMessage);
       socket.off("messagesSeen", handleSeenMessages);
+      socket.off("messageDeleted", handleDeletedMessage);
     };
   }, []);
 
@@ -118,6 +138,13 @@ const ChatList = () => {
     } else {
       return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
     }
+  };
+
+  const getMessagePreview = (message) => {
+    if (!message) return "No messages yet";
+    if (message.deleted) return "Message deleted";
+    if (message.type === "text") return message.content;
+    return "📎 Media";
   };
 
   const filteredUsers = [...users].sort((a, b) => {
@@ -224,12 +251,12 @@ const ChatList = () => {
                     </span>
                   </div>
                   <div className="flex justify-between items-center mt-1">
-                    <p className="text-sm text-gray-500 dark:text-gray-400 truncate">
-                      {user.latestMessage
-                        ? user.latestMessage.type === "text"
-                          ? user.latestMessage.content
-                          : "📎 Media"
-                        : "No messages yet"}
+                    <p className={`text-sm truncate ${
+                      user.latestMessage?.deleted 
+                        ? "text-gray-400 italic dark:text-gray-500"
+                        : "text-gray-500 dark:text-gray-400"
+                    }`}>
+                      {getMessagePreview(user.latestMessage)}
                     </p>
                     {user.unreadCount > 0 && (
                       <span className="bg-blue-500 text-white text-xs font-semibold px-2 py-0.5 rounded-full">

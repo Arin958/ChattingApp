@@ -88,6 +88,8 @@ io.on("connection", async (socket) => {
   const userId = socket.user.id;
   userSocketMap.set(userId, socket.id);
 
+   socket.join(userId);
+
   await User.findByIdAndUpdate(userId, {
     socketId: socket.id,
     status: "online",

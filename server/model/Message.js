@@ -40,13 +40,25 @@ const messageSchema = new mongoose.Schema(
     mediaUrl: {
       type: String,
     },
-    // For message deletion
-    deletedFor: [{
+
+    deleted: {
+      type: Boolean,
+      default: false,
+    },
+    deletedBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
-    }],
+    },
+
+    // For message deletion
+    deletedFor: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+      },
+    ],
   },
-  { 
+  {
     timestamps: true,
     toJSON: { virtuals: true }, // If you want to use virtuals
     toObject: { virtuals: true },
@@ -57,5 +69,5 @@ const messageSchema = new mongoose.Schema(
 messageSchema.index({ sender: 1, receiver: 1 });
 messageSchema.index({ createdAt: -1 }); // For sorting by recent messages
 
-const Message = module.exports = mongoose.model("Message", messageSchema);
+const Message = (module.exports = mongoose.model("Message", messageSchema));
 module.exports = Message;

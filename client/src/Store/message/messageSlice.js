@@ -75,7 +75,7 @@ export const editMessage = createAsyncThunk(
   async ({ messageId, newContent }, { rejectWithValue }) => {
     try {
       const res = await axios.put(
-        `${API}/api/chat/${messageId}`,
+        `${API}/api/chat/edit-message/${messageId}`,
         { newContent },
         { withCredentials: true }
       );
@@ -147,6 +147,24 @@ const messageSlice = createSlice({
           ? { ...msg, content: newContent, edited: true }
           : msg
       );
+    },
+    markMessageAsDeleted: (state, action) => {
+      const message = state.messages.find((m) => m._id === action.payload);
+      if (message) {
+        message.deleted = true;
+        message.content = "This message was deleted";
+      }
+    },
+    updateMessage: (state, action) => {
+      const index = state.messages.findIndex(
+        (m) => m._id === action.payload.id
+      );
+      if (index !== -1) {
+        state.messages[index] = {
+          ...state.messages[index],
+          ...action.payload.changes,
+        };
+      }
     },
   },
   extraReducers: (builder) => {
@@ -226,7 +244,9 @@ export const {
   markSeenLocally,
   addSocketMessage,
   markMessagesSeen,
-  editMessageLocally
+  editMessageLocally,
+  markMessageAsDeleted,
+  updateMessage,
 } = messageSlice.actions;
 
 export default messageSlice.reducer;

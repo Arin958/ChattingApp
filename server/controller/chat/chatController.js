@@ -1,12 +1,9 @@
 const Message = require("../../model/Message");
 const User = require("../../model/User");
-const cloudinary = require('../../utils/cloudinary');
-const upload = require('../../middleware/upload');
-
+const cloudinary = require("../../utils/cloudinary");
+const upload = require("../../middleware/upload");
 
 const mongoose = require("mongoose");
-
-
 
 // @desc    Send a new message
 // @route   POST /api/chat
@@ -25,35 +22,39 @@ exports.sendMessage = async (req, res) => {
     let mediaUrl = null;
     let mediaType = type;
     let messageContent = content;
-    
+
     // Handle file upload if present
     if (req.file) {
       try {
         // Convert buffer to data URI for Cloudinary
-        const dataUri = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
-        
+        const dataUri = `data:${
+          req.file.mimetype
+        };base64,${req.file.buffer.toString("base64")}`;
+
         // Upload to Cloudinary
         const result = await cloudinary.uploader.upload(dataUri, {
-          resource_type: 'auto',
-          folder: 'chat_media'
+          resource_type: "auto",
+          folder: "chat_media",
         });
 
         mediaUrl = result.secure_url;
         mediaType = result.resource_type;
-        
+
         // Set default content if none provided
         if (!messageContent.trim()) {
-          messageContent = mediaType === 'image' ? '📷 Photo' : '🎥 Video';
+          messageContent = mediaType === "image" ? "📷 Photo" : "🎥 Video";
         }
       } catch (uploadError) {
-        console.error('Upload error:', uploadError);
-        return res.status(500).json({ message: 'File upload failed' });
+        console.error("Upload error:", uploadError);
+        return res.status(500).json({ message: "File upload failed" });
       }
     }
 
     // Validate we have either content or media
     if (!messageContent.trim() && !mediaUrl) {
-      return res.status(400).json({ message: "Message content or file is required" });
+      return res
+        .status(400)
+        .json({ message: "Message content or file is required" });
     }
 
     const newMessage = await Message.create({
@@ -114,7 +115,8 @@ exports.getConversation = async (req, res) => {
       .sort({ createdAt: -1 }) // Newest first
       .limit(limit)
       .populate("sender", "name avatar")
-      .populate("receiver", "name avatar");
+      .populate("receiver", "name avatar")
+      
 
     // Mark unseen messages as seen (from the other user)
     const unseenMessages = await Message.updateMany(
@@ -152,49 +154,54 @@ exports.getConversation = async (req, res) => {
 // @route   DELETE /api/chat/:messageId
 // @access  Private
 exports.deleteMessage = async (req, res) => {
-  try {
-    const { messageId } = req.params;
-    const userId = req.user.id;
+    try {
+        // First update the message
+       const updatedMessage = await Message.findByIdAndUpdate(
+    req.params.messageId,
+    {
+        deleted: true,
+        deletedBy: req.user._id,
+        deletedAt: new Date(),
+        content: "This message was deleted"
+    },
+    { new: true }
+)
+.select("sender receiver deleted deletedBy deletedAt content") // make sure these exist
+.lean(); // Use lean() for better performance
 
-    const message = await Message.findById(messageId);
-    if (!message) {
-      return res.status(404).json({ message: "Message not found" });
+        if (!updatedMessage) {
+            return res.status(404).json({ error: 'Message not found' });
+        }
+
+        const io = req.app.get("io");
+        const responseData = {
+            _id: updatedMessage._id,
+            deleted: true,
+            deletedBy: req.user._id, // Just send the ID
+            deletedAt: updatedMessage.deletedAt,
+            content: "This message was deleted"
+        };
+
+        // Emit to both parties with consistent structure
+        io.to(updatedMessage.sender.toString()).emit('messageDeleted', {
+            message: responseData
+        });
+        io.to(updatedMessage.receiver.toString()).emit('messageDeleted', {
+            message: responseData
+        });
+
+        res.json({ 
+            success: true,
+            message: responseData
+        });
+    } catch (err) {
+        console.error('Delete message error:', err);
+        res.status(500).json({ 
+            success: false,
+            error: err.message 
+        });
     }
-
-    // Check if user is sender or receiver
-    if (!message.sender.equals(userId) && !message.receiver.equals(userId)) {
-      return res.status(403).json({ message: "Not authorized" });
-    }
-
-    // Soft delete - add user to deletedFor array
-    const updatedMessage = await Message.findByIdAndUpdate(
-      messageId,
-      { $addToSet: { deletedFor: userId } },
-      { new: true }
-    );
-
-    // Notify other user via socket if online
-    const otherUserId = message.sender.equals(userId)
-      ? message.receiver
-      : message.sender;
-
-    const otherUser = await User.findById(otherUserId);
-    const io = req.app.get("io");
-
-    if (otherUser?.socketId) {
-      io.to(otherUser.socketId).emit("messageDeleted", {
-        messageId,
-        deletedForCurrentUser: false,
-      });
-    }
-
-    res.json(updatedMessage);
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Server error" });
-  }
 };
-
 // @desc    Mark messages as seen
 // @route   PUT /api/chat/mark-seen
 // @access  Private
