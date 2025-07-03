@@ -11,13 +11,51 @@ import {
 } from "../Store/message/messageSlice";
 
 export const useMessageHandlers = (userId, currentChat, API) => {
-  const dispatch = useDispatch();
+ const dispatch = useDispatch();
   const [newMessage, setNewMessage] = useState("");
   const [isUploading, setIsUploading] = useState(false);
   const [sendError, setSendError] = useState(null);
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [filePreview, setFilePreview] = useState(null);
+
+  const handleFileChange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    // Validate file
+    const validTypes = ['image/jpeg', 'image/png', 'image/gif', 'video/mp4'];
+    const MAX_SIZE = 10 * 1024 * 1024; // 10MB
+    
+    if (!validTypes.includes(file.type)) {
+      setSendError('Unsupported file type (only JPEG, PNG, GIF, MP4 allowed)');
+      return;
+    }
+    
+    if (file.size > MAX_SIZE) {
+      setSendError('File too large (max 10MB)');
+      return;
+    }
+
+    setSelectedFile(file);
+
+    // Create preview
+    if (file.type.startsWith('image/')) {
+      const reader = new FileReader();
+      reader.onload = () => setFilePreview(reader.result);
+      reader.readAsDataURL(file);
+    } else {
+      setFilePreview(URL.createObjectURL(file));
+    }
+  };
+
+  const handleRemoveFile = () => {
+    setSelectedFile(null);
+    setFilePreview(null);
+    setSendError(null);
+  };
 
   const handleSendMessage = useCallback(
-    async (e, selectedFile) => {
+    async (e) => {
       e.preventDefault();
       setSendError(null);
       
@@ -33,7 +71,6 @@ export const useMessageHandlers = (userId, currentChat, API) => {
         if (newMessage.trim()) formData.append("content", newMessage);
         if (selectedFile) formData.append("file", selectedFile);
 
-        // Make the API call directly to get the full response
         const response = await axios.post(`${API}/api/chat`, formData, {
           withCredentials: true,
           headers: {
@@ -41,21 +78,20 @@ export const useMessageHandlers = (userId, currentChat, API) => {
           },
         });
 
-        // Dispatch the action with the complete message data
         dispatch(addSocketMessage(response.data));
-        
         setNewMessage("");
-        return response.data; // Return the complete message object
+        setSelectedFile(null);
+        setFilePreview(null);
+        return response.data;
       } catch (err) {
         const errorMsg = err.response?.data?.message || "Failed to send message";
-        console.error("Send message error:", errorMsg);
         setSendError(errorMsg);
         return false;
       } finally {
         setIsUploading(false);
       }
     },
-    [newMessage, currentChat?._id, dispatch, API]
+    [newMessage, selectedFile, currentChat?._id, dispatch, API]
   );
 
   const onMessageChange = useCallback((e) => {
@@ -128,12 +164,16 @@ export const useMessageHandlers = (userId, currentChat, API) => {
   );
 
   return {
-    newMessage,
+     newMessage,
     isUploading,
     sendError,
+    selectedFile,
+    filePreview,
     setNewMessage,
     handleSendMessage,
     onMessageChange,
+    handleFileChange,
+    handleRemoveFile,
     handleDeleteMessage,
     handleEditMessage,
   };

@@ -103,10 +103,7 @@ exports.login = async (req, res) => {
 
 // @desc    Logout user
 // @route   POST /api/auth/logout
-exports.logout = (req, res) => {
-  res.clearCookie("token");
-  res.status(200).json({ message: "Logged out successfully" });
-};
+
 
 // @desc    Get current logged-in user
 // @route   GET /api/auth/me
@@ -149,5 +146,27 @@ exports.getMe = async (req, res) => {
   } catch (err) {
     console.error("GetMe Error:", err);
     res.status(500).json({ message: "Server error" });
+  }
+};
+// @desc    Logout user
+// @route   POST /api/auth/logout
+exports.logout = async (req, res) => {
+  try {
+    res.clearCookie("token", {
+      httpOnly: true,
+      sameSite: "strict",
+      secure: process.env.NODE_ENV === "production",
+    });
+
+    res.status(200).json({
+      success: true,
+      message: "User logged out successfully",
+    });
+  } catch (error) {
+    console.error("Logout error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Logout failed",
+    });
   }
 };

@@ -1,18 +1,18 @@
-import React, { useMemo } from 'react';
-import { useDispatch, useSelector } from 'react-redux';
-import { useParams } from 'react-router-dom';
-import { format } from 'date-fns';
-import socket from '../../socket/socket';
+import React, { useMemo } from "react";
+import { useDispatch, useSelector } from "react-redux";
+import { useParams } from "react-router-dom";
+import { format } from "date-fns";
+import socket from "../../socket/socket";
 
-import { useChatData } from '../../hooks/useChatData';
-import { useSocketHandlers } from '../../hooks/useSocketHandlers';
-import { useMessageHandlers } from '../../hooks/useMessageHandlers';
-import { useScrollHandling } from '../../hooks/useScrollHandling';
-import { useMessageVisibility } from '../../hooks/useMessageVisibility';
+import { useChatData } from "../../hooks/useChatData";
+import { useSocketHandlers } from "../../hooks/useSocketHandlers";
+import { useMessageHandlers } from "../../hooks/useMessageHandlers";
+import { useScrollHandling } from "../../hooks/useScrollHandling";
+import { useMessageVisibility } from "../../hooks/useMessageVisibility";
 
-import ChatHeader from '../../components/chat/ChatHeader';
-import MessageList from '../../components/chat/MessageList';
-import MessageInput from '../../components/chat/MessageInput';
+import ChatHeader from "../../components/chat/ChatHeader";
+import MessageList from "../../components/chat/MessageList";
+import MessageInput from "../../components/chat/MessageInput";
 
 const API = import.meta.env.VITE_API_URL;
 
@@ -23,28 +23,29 @@ const ChatRoom = () => {
 
   // Custom hooks
   const { currentChat, loadingChat } = useChatData(API);
-  const { 
-    messagesEndRef, 
-    messagesContainerRef, 
-    isAtBottom, 
-    scrollToBottom 
-  } = useScrollHandling();
-  
+  const { messagesEndRef, messagesContainerRef, isAtBottom, scrollToBottom } =
+    useScrollHandling();
+
   const { isTyping, isSocketConnected, emitTyping } = useSocketHandlers(
     userId,
     user,
     messages,
     scrollToBottom,
-    isAtBottom  
+    isAtBottom
   );
 
-  const { 
-    newMessage, 
-    isUploading, 
-    handleSendMessage, 
-    onMessageChange, 
-    handleDeleteMessage, 
-    handleEditMessage 
+  const {
+    newMessage,
+    isUploading,
+    sendError,
+    selectedFile,
+    filePreview,
+    handleSendMessage,
+    onMessageChange,
+    handleFileChange,
+    handleRemoveFile,
+    handleDeleteMessage,
+    handleEditMessage,
   } = useMessageHandlers(userId, currentChat, API);
 
   const { handleMessageSeen } = useMessageVisibility(user, messages);
@@ -78,9 +79,9 @@ const ChatRoom = () => {
 
   return (
     <div className="flex flex-col h-full bg-gray-50">
-      <ChatHeader 
-        currentChat={currentChat} 
-        isTyping={isTyping} 
+      <ChatHeader
+        currentChat={currentChat}
+        isTyping={isTyping}
         isSocketConnected={isSocketConnected}
       />
 
@@ -106,7 +107,12 @@ const ChatRoom = () => {
       <MessageInput
         newMessage={newMessage}
         isUploading={isUploading}
+        sendError={sendError}
+        selectedFile={selectedFile}
+        filePreview={filePreview}
         onMessageChange={handleMessageChange}
+        onFileChange={handleFileChange}
+        onRemoveFile={handleRemoveFile}
         onSendMessage={handleSendMessage}
       />
     </div>
@@ -126,7 +132,8 @@ const ChatNotFound = () => (
     <div className="text-center p-6 max-w-md">
       <h3 className="text-xl font-medium text-gray-700 mb-2">Chat not found</h3>
       <p className="text-gray-500">
-        The user you're trying to chat with doesn't exist or you don't have permission
+        The user you're trying to chat with doesn't exist or you don't have
+        permission
       </p>
     </div>
   </div>

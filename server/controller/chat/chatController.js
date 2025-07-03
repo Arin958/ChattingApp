@@ -10,8 +10,14 @@ const mongoose = require("mongoose");
 // @access  Private
 exports.sendMessage = async (req, res) => {
   try {
-    const { receiver, content = "", type = "text" } = req.body; // Make content optional with default
+    const { receiver, content = "" } = req.body; // From FormData text fields
     const sender = req.user.id;
+    const file = req.file; // From multer
+
+    // Validate required fields
+    if (!receiver) {
+      return res.status(400).json({ message: "Receiver is required" });
+    }
 
     // Validate receiver exists
     const receiverUser = await User.findById(receiver);
@@ -20,25 +26,21 @@ exports.sendMessage = async (req, res) => {
     }
 
     let mediaUrl = null;
-    let mediaType = type;
+    let mediaType = "text";
     let messageContent = content;
 
     // Handle file upload if present
-    if (req.file) {
+    if (file) {
       try {
-        // Convert buffer to data URI for Cloudinary
-        const dataUri = `data:${
-          req.file.mimetype
-        };base64,${req.file.buffer.toString("base64")}`;
-
-        // Upload to Cloudinary
+        const dataUri = `data:${file.mimetype};base64,${file.buffer.toString("base64")}`;
+        
         const result = await cloudinary.uploader.upload(dataUri, {
           resource_type: "auto",
           folder: "chat_media",
         });
 
         mediaUrl = result.secure_url;
-        mediaType = result.resource_type;
+        mediaType = result.resource_type; // 'image', 'video', etc.
 
         // Set default content if none provided
         if (!messageContent.trim()) {
@@ -50,13 +52,7 @@ exports.sendMessage = async (req, res) => {
       }
     }
 
-    // Validate we have either content or media
-    if (!messageContent.trim() && !mediaUrl) {
-      return res
-        .status(400)
-        .json({ message: "Message content or file is required" });
-    }
-
+    // Create message
     const newMessage = await Message.create({
       sender,
       receiver,
