@@ -1,229 +1,364 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState, useCallback, useMemo } from "react";
+import { debounce, throttle } from "lodash";
+import { useDispatch, useSelector } from "react-redux";
+import {
+  addIncomingMessage,
+  removeMessage,
+  markSeenLocally,
+  resetMessages,
+  fetchMessages,
+  markMessagesAsSeen,
+  sendMessage,
+  addSocketMessage,
+} from "../../Store/message/messageSlice";
 import socket from "../../socket/socket";
+import { format } from "date-fns";
 import axios from "axios";
-import { useNavigate } from "react-router-dom";
+import { useParams } from "react-router-dom";
+
+// Icons import (keep your existing imports)
 
 const API = import.meta.env.VITE_API_URL;
 
-const ChatList = () => {
-  const [users, setUsers] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState("");
-  const navigate = useNavigate();
+const ChatRoom = () => {
+  const dispatch = useDispatch();
+  const messageRefs = useRef({});
+  const typingTimeoutRef = useRef(null);
+  const messagesEndRef = useRef(null);
+  const fileInputRef = useRef(null);
+  const messagesContainerRef = useRef(null);
+  const [newMessage, setNewMessage] = useState("");
+  const { messages, loading } = useSelector((state) => state.message);
+  const { user } = useSelector((state) => state.auth);
+  const [isTyping, setIsTyping] = useState(false);
+  const { userId } = useParams();
+  const [currentChat, setCurrentChat] = useState(null);
+  const [loadingChat, setLoadingChat] = useState(true);
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [filePreview, setFilePreview] = useState(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [isAtBottom, setIsAtBottom] = useState(true);
+  const prevMessagesLength = useRef(0);
+
+  // Fetch chat data with improved error handling
+  const fetchChatData = useCallback(async () => {
+    if (!userId) return;
+
+    try {
+      setLoadingChat(true);
+      dispatch(resetMessages());
+
+      const [userRes, messagesRes] = await Promise.all([
+        axios.get(`${API}/api/get-users/${userId}`, {
+          withCredentials: true,
+        }),
+        dispatch(fetchMessages(userId)).unwrap(),
+      ]);
+
+      setCurrentChat(userRes.data);
+      
+      // Sort messages by createdAt if not already sorted
+      if (messagesRes?.length > 0) {
+        const sortedMessages = [...messagesRes].sort(
+          (a, b) => new Date(a.createdAt) - new Date(b.createdAt)
+        );
+        // Dispatch action to update store with sorted messages if needed
+      }
+    } catch (err) {
+      console.error("Error fetching chat data:", err);
+    } finally {
+      setLoadingChat(false);
+    }
+  }, [userId, dispatch]);
 
   useEffect(() => {
-    const getUsers = async () => {
-      try {
-        setIsLoading(true);
-        const res = await axios.get(`${API}/api/get-users`, {
-          withCredentials: true,
-        });
-        setUsers(res.data);
-      } catch (err) {
-        console.error(err.response?.data || err.message);
-      } finally {
-        setIsLoading(false);
+    fetchChatData();
+    return () => {
+      socket.emit("stopTyping", userId);
+    };
+  }, [fetchChatData, userId]);
+
+  // Optimized message filtering and memoization
+  const currentMessages = useMemo(() => {
+    return messages
+      .filter(
+        (msg) =>
+          (msg.sender._id === userId && msg.receiver._id === user._id) ||
+          (msg.sender._id === user._id && msg.receiver._id === userId)
+      )
+      .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+  }, [messages, userId, user._id]);
+
+  // Improved scroll behavior
+  const scrollToBottom = useCallback((behavior = "smooth") => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({
+        behavior,
+        block: "end",
+      });
+    }
+  }, []);
+
+  // Handle scroll events to detect if user is at bottom
+  const handleScroll = useCallback(
+    throttle(() => {
+      if (!messagesContainerRef.current) return;
+      
+      const { scrollTop, scrollHeight, clientHeight } = messagesContainerRef.current;
+      const threshold = 50; // pixels from bottom
+      const atBottom = scrollHeight - (scrollTop + clientHeight) < threshold;
+      
+      setIsAtBottom(atBottom);
+    }, 200),
+    []
+  );
+
+  // Scroll to bottom when new messages arrive and user is at bottom
+  useEffect(() => {
+    if (isAtBottom && currentMessages.length > prevMessagesLength.current) {
+      scrollToBottom();
+    }
+    prevMessagesLength.current = currentMessages.length;
+  }, [currentMessages.length, isAtBottom, scrollToBottom]);
+
+  // Initialize scroll listener
+  useEffect(() => {
+    const container = messagesContainerRef.current;
+    if (container) {
+      container.addEventListener("scroll", handleScroll);
+      return () => container.removeEventListener("scroll", handleScroll);
+    }
+  }, [handleScroll]);
+
+  // Improved socket event handlers with debouncing
+  useEffect(() => {
+    const handleNewMessage = throttle((message) => {
+      const normalizedMessage = {
+        ...message,
+        sender:
+          typeof message.sender === "object"
+            ? message.sender
+            : { _id: message.sender },
+        receiver:
+          typeof message.receiver === "object"
+            ? message.receiver
+            : { _id: message.receiver },
+      };
+      
+      // Only add if not already in messages
+      if (!messages.some(m => m._id === normalizedMessage._id)) {
+        dispatch(addSocketMessage(normalizedMessage));
+      }
+    }, 100);
+
+    const handleDeletedMessage = ({ messageId }) => {
+      dispatch(removeMessage(messageId));
+    };
+
+    const handleMessagesSeen = ({ messageId, seenAt }) => {
+      dispatch(
+        markSeenLocally({
+          messageId,
+          seenAt: seenAt || new Date().toISOString(),
+        })
+      );
+    };
+
+    const handleTypingEvent = (senderId) => {
+      if (senderId === userId) {
+        setIsTyping(true);
+        clearTimeout(typingTimeoutRef.current);
+        typingTimeoutRef.current = setTimeout(() => {
+          setIsTyping(false);
+        }, 2000);
       }
     };
 
-    getUsers();
-  }, []);
-
-  useEffect(() => {
-    // Handle initial online users list
-    const handleOnlineUsers = (onlineUserIds) => {
-      setUsers((prevUsers) =>
-        prevUsers.map((user) => ({
-          ...user,
-          status: onlineUserIds.includes(user._id) ? "online" : "offline",
-        }))
-      );
+    const handleStopTypingEvent = (senderId) => {
+      if (senderId === userId) {
+        setIsTyping(false);
+        clearTimeout(typingTimeoutRef.current);
+      }
     };
 
-    // Handle user coming online
-    const handleUserOnline = (userId) => {
-      setUsers((prevUsers) =>
-        prevUsers.map((user) =>
-          user._id === userId ? { ...user, status: "online" } : user
-        )
-      );
-    };
+    socket.on("newMessage", handleNewMessage);
+    socket.on("messageDeleted", handleDeletedMessage);
+    socket.on("messagesSeen", handleMessagesSeen);
+    socket.on("typing", handleTypingEvent);
+    socket.on("stopTyping", handleStopTypingEvent);
 
-    // Handle user going offline
-    const handleUserOffline = (userId) => {
-      setUsers((prevUsers) =>
-        prevUsers.map((user) =>
-          user._id === userId ? { ...user, status: "offline" } : user
-        )
-      );
-    };
-
-    // Listen for status change events
-    socket.on("online-users", handleOnlineUsers);
-    socket.on("user-online", handleUserOnline);
-    socket.on("user-offline", handleUserOffline);
-
-    // Request current online users when component mounts
-    socket.emit("get-online-users");
-
-    // Cleanup
     return () => {
-      socket.off("online-users", handleOnlineUsers);
-      socket.off("user-online", handleUserOnline);
-      socket.off("user-offline", handleUserOffline);
+      socket.off("newMessage", handleNewMessage);
+      socket.off("messageDeleted", handleDeletedMessage);
+      socket.off("messagesSeen", handleMessagesSeen);
+      socket.off("typing", handleTypingEvent);
+      socket.off("stopTyping", handleStopTypingEvent);
+      clearTimeout(typingTimeoutRef.current);
     };
-  }, []);
-  const filteredUsers = users.filter((user) =>
-    user.username.toLowerCase().includes(searchTerm.toLowerCase())
+  }, [userId, dispatch, messages]);
+
+  // Optimized message sending
+  const handleSendMessage = async (e) => {
+    e.preventDefault();
+    
+    if ((!newMessage.trim() && !selectedFile) || !currentChat?._id) return;
+
+    try {
+      setIsUploading(true);
+      
+      const formData = new FormData();
+      formData.append("receiver", currentChat._id);
+      if (newMessage.trim()) formData.append("content", newMessage);
+      if (selectedFile) formData.append("file", selectedFile);
+
+      await dispatch(sendMessage(formData)).unwrap();
+      
+      setNewMessage("");
+      setSelectedFile(null);
+      setFilePreview(null);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      socket.emit("stopTyping", userId);
+      
+      // Optimistically scroll to bottom
+      setTimeout(() => scrollToBottom("auto"), 100);
+    } catch (err) {
+      console.error("Failed to send message:", err);
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  // Improved typing indicator with debouncing
+  const handleTyping = useCallback(
+    debounce((text) => {
+      if (!userId) return;
+
+      if (text.trim()) {
+        socket.emit("typing", userId);
+      } else {
+        socket.emit("stopTyping", userId);
+      }
+    }, 500),
+    [userId]
   );
 
-  const handleUserClick = async (userId) => {
-    try {
-      // Check if a chat already exists with this user
-      const response = await axios.get(`${API}/api/chat/${userId}`, {
-        withCredentials: true,
-      });
-
-      // Navigate to the chat using userId since that's your route parameter
-      navigate(`/chats/${userId}`);
-    } catch (error) {
-      console.error("Error creating/fetching chat:", error);
-      // Handle error (maybe show a notification)
-    }
+  const onMessageChange = (e) => {
+    const text = e.target.value;
+    setNewMessage(text);
+    handleTyping(text);
   };
 
-  const getStatusColor = (status) => {
-    switch (status) {
-      case "online":
-        return "bg-green-500";
-      case "offline":
-        return "bg-gray-500";
-      case "away":
-        return "bg-yellow-500";
-      case "busy":
-        return "bg-red-500";
-      default:
-        return "bg-gray-500";
+  // ... (keep your existing Avatar and MessageBubble components)
+
+  // Optimized message rendering
+  const renderMessages = useMemo(() => {
+    if (loading && messages.length === 0) {
+      return (
+        <div className="flex justify-center items-center h-full">
+          <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-blue-500"></div>
+        </div>
+      );
     }
-  };
 
-  return (
-    <div className="flex flex-col h-full bg-white dark:bg-gray-900 rounded-xl shadow-lg overflow-hidden">
-      {/* Header */}
-      <div className="p-4 border-b border-gray-200 dark:border-gray-700">
-        <h1 className="text-2xl font-bold text-gray-800 dark:text-white">
-          Start a Chat
-        </h1>
+    if (currentMessages.length === 0) {
+      return (
+        <div className="flex flex-col items-center justify-center h-full text-gray-500">
+          <p className="text-lg">No messages yet</p>
+          <p className="text-sm mt-1">
+            Send a message to start the conversation
+          </p>
+        </div>
+      );
+    }
 
-        {/* Search Bar */}
-        <div className="mt-4 relative">
-          <input
-            type="text"
-            placeholder="Search users..."
-            className="w-full p-3 pl-10 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
-          <svg
-            className="absolute left-3 top-3.5 h-5 w-5 text-gray-400"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-            xmlns="http://www.w3.org/2000/svg"
+    return (
+      <>
+        {currentMessages.map((message) => (
+          <div
+            key={message._id}
+            className={`flex ${
+              message.sender._id === user._id ? "justify-end" : "justify-start"
+            }`}
           >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+            {message.sender._id !== user._id && (
+              <Avatar
+                src={message.sender.avatar}
+                alt={message.sender.username}
+                size="sm"
+                className="mr-2 self-end mb-1"
+              />
+            )}
+            <MessageBubble
+              message={message}
+              isCurrentUser={message.sender._id === user._id}
             />
-          </svg>
+          </div>
+        ))}
+
+        {isTyping && (
+          <div className="flex justify-start">
+            <Avatar
+              src={currentChat?.avatar}
+              alt={currentChat?.username}
+              size="sm"
+              className="mr-2 self-end mb-1"
+            />
+            <div className="flex items-center px-4 py-2 rounded-2xl bg-gray-100 text-gray-800 rounded-tl-none max-w-xs">
+              <div className="flex space-x-1 px-2 py-1">
+                <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" />
+                <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
+                <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div ref={messagesEndRef} />
+      </>
+    );
+  }, [loading, messages.length, currentMessages, user._id, isTyping, currentChat]);
+
+  if (loadingChat) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-blue-500"></div>
+      </div>
+    );
+  }
+
+  if (!currentChat) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="text-center p-6 max-w-md">
+          <h3 className="text-xl font-medium text-gray-700 mb-2">
+            Chat not found
+          </h3>
+          <p className="text-gray-500">
+            The user you're trying to chat with doesn't exist or you don't have
+            permission
+          </p>
         </div>
       </div>
+    );
+  }
 
-      {/* User List */}
-      <div className="flex-1 overflow-y-auto p-4">
-        {isLoading ? (
-          <div className="flex justify-center items-center h-full">
-            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
-          </div>
-        ) : filteredUsers.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-gray-500 dark:text-gray-400">
-            <svg
-              className="h-16 w-16 mb-4"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={1}
-                d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"
-              />
-            </svg>
-            <p className="text-lg">No users found</p>
-          </div>
-        ) : (
-          <ul className="space-y-3">
-            {filteredUsers.map((user) => (
-              <li
-                key={user._id}
-                onClick={() => handleUserClick(user._id)}
-                className="flex items-center p-3 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors cursor-pointer"
-              >
-                <div className="relative">
-                  <img
-                    src={user.avatar}
-                    alt={user.username}
-                    className="w-12 h-12 rounded-full object-cover border-2 border-white dark:border-gray-800"
-                  />
-                  <span
-                    className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-white dark:border-gray-800 ${getStatusColor(
-                      user.status
-                    )}`}
-                    title={user.status}
-                  ></span>
-                </div>
-                <div className="ml-4 flex-1">
-                  <div className="flex justify-between items-center">
-                    <h3 className="font-medium text-gray-900 dark:text-white">
-                      {user.username}
-                    </h3>
-                    {user.unreadCount > 0 && (
-                      <span className="bg-blue-500 text-white text-xs font-bold px-2 py-1 rounded-full">
-                        {user.unreadCount}
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-sm text-gray-500 dark:text-gray-400 capitalize">
-                    {user.status}
-                  </p>
-                </div>
-                <button className="ml-2 p-2 text-blue-500 hover:text-blue-600 dark:hover:text-blue-400">
-                  <svg
-                    className="h-5 w-5"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                    xmlns="http://www.w3.org/2000/svg"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
-                    />
-                  </svg>
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
+  return (
+    <div className="flex flex-col h-full bg-gray-50">
+      {/* Chat header (keep your existing header) */}
+
+      {/* Messages area with improved scrolling */}
+      <div 
+        ref={messagesContainerRef}
+        className="flex-1 overflow-y-auto p-4 space-y-2"
+      >
+        {renderMessages}
       </div>
+
+      {/* File preview (keep your existing preview) */}
+
+      {/* Message input (keep your existing input with onChange={onMessageChange}) */}
     </div>
   );
 };
 
-export default ChatList;
+export default ChatRoom;

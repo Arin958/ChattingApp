@@ -16,6 +16,12 @@ export const useSocketHandlers = (userId, user, messages, scrollToBottom) => {
   const [isTyping, setIsTyping] = useState(false);
   const [isSocketConnected, setIsSocketConnected] = useState(false);
 
+  const stopTyping = useCallback(() => {
+    socket.emit("stopTyping", userId);
+    setIsTyping(false);
+    clearTimeout(typingTimeoutRef.current);
+  }, [userId]);
+
   // Handle incoming new messages
   const handleNewMessage = useCallback(
     (message) => {
@@ -41,40 +47,50 @@ export const useSocketHandlers = (userId, user, messages, scrollToBottom) => {
       );
 
       if (!exists) {
+        // Stop typing when a new message arrives from this user
+        if (normalizedMessage.sender._id === userId) {
+          stopTyping();
+        }
+
         dispatch(addSocketMessage(normalizedMessage));
         if (normalizedMessage.sender._id === user._id) {
           setTimeout(() => scrollToBottom("auto"), 50);
         }
       }
     },
-    [dispatch, messages, user._id, scrollToBottom]
+    [dispatch, messages, user._id, scrollToBottom, userId, stopTyping]
   );
 
   // Handle deleted messages
-const handleDeletedMessage = useCallback((socketResponse) => {
-    try {
+  const handleDeletedMessage = useCallback(
+    (socketResponse) => {
+      try {
         // Validate response structure
         if (!socketResponse?.message?._id) {
-            console.warn('Invalid deletion payload:', socketResponse);
-            return;
+          console.warn("Invalid deletion payload:", socketResponse);
+          return;
         }
 
-        const { _id, deleted, deletedBy, deletedAt, content } = socketResponse.message;
-        
-        dispatch(updateMessage({
+        const { _id, deleted, deletedBy, deletedAt, content } =
+          socketResponse.message;
+
+        dispatch(
+          updateMessage({
             id: _id,
             changes: {
-                deleted: deleted !== undefined ? deleted : true,
-                deletedBy: deletedBy || null,
-                deletedAt: deletedAt || new Date().toISOString(),
-                content: content || "This message was deleted"
-            }
-        }));
-    } catch (err) {
-        console.error('Error processing deleted message:', err);
-    }
-}, [dispatch]);
-
+              deleted: deleted !== undefined ? deleted : true,
+              deletedBy: deletedBy || null,
+              deletedAt: deletedAt || new Date().toISOString(),
+              content: content || "This message was deleted",
+            },
+          })
+        );
+      } catch (err) {
+        console.error("Error processing deleted message:", err);
+      }
+    },
+    [dispatch]
+  );
 
   // Handle message seen updates
   const handleMessagesSeen = useCallback(
@@ -176,5 +192,6 @@ const handleDeletedMessage = useCallback((socketResponse) => {
         socket.emit("stopTyping", userId);
       }
     },
+    stopTyping,
   };
 };
