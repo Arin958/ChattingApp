@@ -1,6 +1,6 @@
-import React, { useRef, useEffect } from 'react';
-import Avatar from './Avatar';
-import MessageBubble from './MessageBubble';
+import React, { useRef, useEffect } from "react";
+import Avatar from "./Avatar";
+import MessageBubble from "./MessageBubble";
 
 const MessageList = ({
   messages,
@@ -12,10 +12,16 @@ const MessageList = ({
   messagesEndRef,
   messagesContainerRef,
   isAtBottom,
-  scrollToBottom
+  scrollToBottom,
 }) => {
   const prevMessagesLength = useRef(0);
 
+  useEffect(() => {
+    if (isTyping) {
+      // Scroll to bottom when typing indicator appears
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [isTyping, messagesEndRef]);
   useEffect(() => {
     if (isAtBottom && messages.length > prevMessagesLength.current) {
       scrollToBottom();
@@ -38,7 +44,9 @@ const MessageList = ({
         <div
           key={message._id}
           className={`flex ${
-            message.sender._id === currentUser._id ? 'justify-end' : 'justify-start'
+            message.sender._id === currentUser._id
+              ? "justify-end"
+              : "justify-start"
           }`}
         >
           {message.sender._id !== currentUser._id && (
@@ -71,11 +79,11 @@ const MessageList = ({
               <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" />
               <div
                 className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
-                style={{ animationDelay: '150ms' }}
+                style={{ animationDelay: "150ms" }}
               />
               <div
                 className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
-                style={{ animationDelay: '300ms' }}
+                style={{ animationDelay: "300ms" }}
               />
             </div>
           </div>

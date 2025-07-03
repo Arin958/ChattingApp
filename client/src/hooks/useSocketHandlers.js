@@ -10,7 +10,13 @@ import {
   updateMessage,
 } from "../Store/message/messageSlice";
 
-export const useSocketHandlers = (userId, user, messages, scrollToBottom) => {
+export const useSocketHandlers = (
+  userId,
+  user,
+  messages,
+  scrollToBottom,
+  isAtBottom = true
+) => {
   const dispatch = useDispatch();
   const typingTimeoutRef = useRef(null);
   const [isTyping, setIsTyping] = useState(false);
@@ -53,12 +59,21 @@ export const useSocketHandlers = (userId, user, messages, scrollToBottom) => {
         }
 
         dispatch(addSocketMessage(normalizedMessage));
-        if (normalizedMessage.sender._id === user._id) {
+
+        const shouldScroll =
+          normalizedMessage.sender._id === user._id ||
+          (normalizedMessage.sender._id === userId && isAtBottom);
+
+
+
+
+
+        if (shouldScroll) {
           setTimeout(() => scrollToBottom("auto"), 50);
         }
       }
     },
-    [dispatch, messages, user._id, scrollToBottom, userId, stopTyping]
+    [dispatch, messages, user._id, scrollToBottom, userId, stopTyping, isAtBottom]
   );
 
   // Handle deleted messages
@@ -106,18 +121,19 @@ export const useSocketHandlers = (userId, user, messages, scrollToBottom) => {
   );
 
   // Handle typing indicators
-  const handleTypingEvent = useCallback(
-    (senderId) => {
-      if (senderId === userId) {
-        setIsTyping(true);
-        clearTimeout(typingTimeoutRef.current);
-        typingTimeoutRef.current = setTimeout(() => {
-          setIsTyping(false);
-        }, 2000);
-      }
-    },
-    [userId]
-  );
+const handleTypingEvent = useCallback(
+  (senderId) => {
+    if (senderId === userId) {
+      setIsTyping(true);
+      scrollToBottom("smooth"); // Add this line to scroll when typing starts
+      clearTimeout(typingTimeoutRef.current);
+      typingTimeoutRef.current = setTimeout(() => {
+        setIsTyping(false);
+      }, 2000);
+    }
+  },
+  [userId, scrollToBottom] // Add scrollToBottom to dependencies
+);
 
   // Handle stop typing indicators
   const handleStopTypingEvent = useCallback(

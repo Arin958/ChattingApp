@@ -34,7 +34,8 @@ const ChatRoom = () => {
     userId,
     user,
     messages,
-    scrollToBottom
+    scrollToBottom,
+    isAtBottom  
   );
 
   const { 
