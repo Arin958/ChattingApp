@@ -30,11 +30,8 @@ export const useSocketHandlers = (
     clearTimeout(typingTimeoutRef.current);
   }, [userId]);
 
-  useEffect(() => {
-  messagesRef.current = messages;
-}, [messages]);
 
-
+  
   // Handle incoming new messages - simplified existence check
   const handleNewMessage = useCallback(
     (message) => {
@@ -47,7 +44,7 @@ export const useSocketHandlers = (
       };
 
       // More lenient duplicate check
-      const isDuplicate = messagesRef.current.some(m => m._id === normalizedMessage._id);
+      const isDuplicate = messages.some(m => m._id === normalizedMessage._id);
       if (isDuplicate) return;
 
       // Add to Redux store
