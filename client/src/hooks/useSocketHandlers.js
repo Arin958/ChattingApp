@@ -44,7 +44,11 @@ export const useSocketHandlers = (
       };
 
       // More lenient duplicate check
-      const isDuplicate = messages.some(m => m._id === normalizedMessage._id);
+      const isDuplicate = messages.some(m => 
+  m._id === normalizedMessage._id || 
+  (m.content === normalizedMessage.content && 
+   Math.abs(new Date(m.createdAt) - new Date(normalizedMessage.createdAt)) < 1000)
+);
       if (isDuplicate) return;
 
       // Add to Redux store
