@@ -18,15 +18,14 @@ export default function Login() {
   const location = useLocation();
   const { loading, error, isAuthenticated } = useSelector((state) => state.auth);
 
-  // Reset error when component unmounts
+  
   useEffect(() => {
     return () => {
       dispatch(resetError());
     };
   }, [dispatch]);
 
-  // Redirect if already authenticated or after successful login
-
+  
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -58,7 +57,9 @@ export default function Login() {
     await dispatch(loginUser({
       email: formData.email,
       password: formData.password
-    }));
+    })).unwrap();
+
+
 
     navigate('/');
   };
@@ -77,16 +78,16 @@ export default function Login() {
             <p className="text-gray-600">Sign in to your account</p>
           </div>
 
-          {error && (
-            <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="mb-4 p-3 bg-red-50 text-red-600 rounded-lg text-sm flex items-start"
-            >
-              <FiAlertCircle className="mt-0.5 mr-2 flex-shrink-0" />
-              <span>{error}</span>
-            </motion.div>
-          )}
+       {(error || validationErrors.server) && (
+  <motion.div 
+    initial={{ opacity: 0 }}
+    animate={{ opacity: 1 }}
+    className="mb-4 p-3 bg-red-50 text-red-600 rounded-lg text-sm flex items-start"
+  >
+    <FiAlertCircle className="mt-0.5 mr-2 flex-shrink-0" />
+    <span>{error || validationErrors.server}</span>
+  </motion.div>
+)}
 
           <form onSubmit={handleSubmit} className="space-y-5">
             {/* Email */}
