@@ -1,13 +1,11 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useDispatch } from "react-redux";
-import socket from "../socket/socket";
+import { getSocket } from "../socket/socket";
 import {
   addSocketMessage,
-  removeMessage,
+  updateMessage,
   markSeenLocally,
   editMessageLocally,
-  markMessageAsDeleted,
-  updateMessage,
 } from "../Store/message/messageSlice";
 
 export const useSocketHandlers = (
@@ -21,191 +19,126 @@ export const useSocketHandlers = (
   const typingTimeoutRef = useRef(null);
   const [isTyping, setIsTyping] = useState(false);
   const [isSocketConnected, setIsSocketConnected] = useState(false);
+  const socketRef = useRef(null);
 
   const stopTyping = useCallback(() => {
-    socket.emit("stopTyping", userId);
+    if (socketRef.current) {
+      socketRef.current.emit("stopTyping", userId);
+    }
     setIsTyping(false);
     clearTimeout(typingTimeoutRef.current);
   }, [userId]);
 
-  // Handle incoming new messages
+  // Handle incoming new messages - simplified existence check
   const handleNewMessage = useCallback(
     (message) => {
+      // Normalize message structure
       const normalizedMessage = {
         ...message,
-        sender:
-          typeof message.sender === "object"
-            ? message.sender
-            : { _id: message.sender },
-        receiver:
-          typeof message.receiver === "object"
-            ? message.receiver
-            : { _id: message.receiver },
+        sender: typeof message.sender === "string" ? { _id: message.sender } : message.sender,
+        receiver: typeof message.receiver === "string" ? { _id: message.receiver } : message.receiver,
         createdAt: message.createdAt || new Date().toISOString(),
       };
 
-      const exists = messages.some(
-        (m) =>
-          m._id === normalizedMessage._id ||
-          (m.content === normalizedMessage.content &&
-            new Date(m.createdAt).getTime() ===
-              new Date(normalizedMessage.createdAt).getTime())
-      );
+      // More lenient duplicate check
+      const isDuplicate = messages.some(m => m._id === normalizedMessage._id);
+      if (isDuplicate) return;
 
-      if (!exists) {
-        // Stop typing when a new message arrives from this user
-        if (normalizedMessage.sender._id === userId) {
-          stopTyping();
-        }
+      // Add to Redux store
+      dispatch(addSocketMessage(normalizedMessage));
 
-        dispatch(addSocketMessage(normalizedMessage));
+      // Scroll logic
+      const shouldScroll = 
+        normalizedMessage.sender._id === user._id || 
+        (normalizedMessage.receiver._id === user._id && isAtBottom);
+      
+      if (shouldScroll) {
+        setTimeout(() => scrollToBottom("auto"), 50);
+      }
 
-        const shouldScroll =
-          normalizedMessage.sender._id === user._id ||
-          (normalizedMessage.sender._id === userId && isAtBottom);
-
-
-
-
-
-        if (shouldScroll) {
-          setTimeout(() => scrollToBottom("auto"), 50);
-        }
+      // Stop typing indicator if message is from this chat
+      if (normalizedMessage.sender._id === userId) {
+        stopTyping();
       }
     },
-    [dispatch, messages, user._id, scrollToBottom, userId, stopTyping, isAtBottom]
+    [dispatch, messages, user._id, userId, isAtBottom, scrollToBottom, stopTyping]
   );
 
-  // Handle deleted messages
-  const handleDeletedMessage = useCallback(
-    (socketResponse) => {
-      try {
-        // Validate response structure
-        if (!socketResponse?.message?._id) {
-          console.warn("Invalid deletion payload:", socketResponse);
-          return;
-        }
-
-        const { _id, deleted, deletedBy, deletedAt, content } =
-          socketResponse.message;
-
-        dispatch(
-          updateMessage({
-            id: _id,
-            changes: {
-              deleted: deleted !== undefined ? deleted : true,
-              deletedBy: deletedBy || null,
-              deletedAt: deletedAt || new Date().toISOString(),
-              content: content || "This message was deleted",
-            },
-          })
-        );
-      } catch (err) {
-        console.error("Error processing deleted message:", err);
-      }
-    },
-    [dispatch]
-  );
-
-  // Handle message seen updates
-  const handleMessagesSeen = useCallback(
-    ({ messageId, seenAt }) => {
-      dispatch(
-        markSeenLocally({
-          messageId,
-          seenAt: seenAt || new Date().toISOString(),
-        })
-      );
-    },
-    [dispatch]
-  );
-
-  // Handle typing indicators
-const handleTypingEvent = useCallback(
-  (senderId) => {
-    if (senderId === userId) {
-      setIsTyping(true);
-      scrollToBottom("smooth"); // Add this line to scroll when typing starts
-      clearTimeout(typingTimeoutRef.current);
-      typingTimeoutRef.current = setTimeout(() => {
-        setIsTyping(false);
-      }, 2000);
-    }
-  },
-  [userId, scrollToBottom] // Add scrollToBottom to dependencies
-);
-
-  // Handle stop typing indicators
-  const handleStopTypingEvent = useCallback(
-    (senderId) => {
-      if (senderId === userId) {
-        setIsTyping(false);
-        clearTimeout(typingTimeoutRef.current);
-      }
-    },
-    [userId]
-  );
-
-  // Handle edited messages
-  const handleMessageEdited = useCallback(
-    ({ messageId, newContent }) => {
-      dispatch(editMessageLocally({ messageId, newContent }));
-    },
-    [dispatch]
-  );
-
-  // Handle connection status
-  const handleConnect = useCallback(() => {
-    setIsSocketConnected(true);
-    console.log("Socket connected");
-  }, []);
-
-  const handleDisconnect = useCallback(() => {
-    setIsSocketConnected(false);
-    console.log("Socket disconnected");
-  }, []);
+  // Other handlers remain similar but use socketRef.current
+  const handleDeletedMessage = useCallback(({ message }) => {
+    dispatch(
+      updateMessage({
+        id: message._id,
+        changes: {
+          deleted: true,
+          content: "This message was deleted",
+          deletedAt: message.deletedAt || new Date().toISOString(),
+        },
+      })
+    );
+  }, [dispatch]);
 
   // Setup all socket event listeners
   useEffect(() => {
-    socket.on("connect", handleConnect);
-    socket.on("disconnect", handleDisconnect);
+    if (!user?._id) return;
+
+    // Get or initialize socket
+    const socket = getSocket();
+    socketRef.current = socket;
+
+    const onConnect = () => {
+      setIsSocketConnected(true);
+      console.log("Socket connected");
+    };
+
+    const onDisconnect = () => {
+      setIsSocketConnected(false);
+      console.log("Socket disconnected");
+    };
+
+    socket.on("connect", onConnect);
+    socket.on("disconnect", onDisconnect);
     socket.on("newMessage", handleNewMessage);
     socket.on("messageDeleted", handleDeletedMessage);
-    socket.on("messagesSeen", handleMessagesSeen);
-    socket.on("typing", handleTypingEvent);
-    socket.on("stopTyping", handleStopTypingEvent);
-    socket.on("messageEdited", handleMessageEdited);
+    socket.on("messagesSeen", ({ messageId }) => {
+      dispatch(markSeenLocally({ messageId }));
+    });
+    socket.on("typing", (senderId) => {
+      if (senderId === userId) {
+        setIsTyping(true);
+        scrollToBottom("smooth");
+        clearTimeout(typingTimeoutRef.current);
+        typingTimeoutRef.current = setTimeout(() => setIsTyping(false), 2000);
+      }
+    });
+    socket.on("stopTyping", (senderId) => {
+      if (senderId === userId) setIsTyping(false);
+    });
+    socket.on("messageEdited", ({ messageId, newContent }) => {
+      dispatch(editMessageLocally({ messageId, newContent }));
+    });
 
     return () => {
-      socket.off("connect", handleConnect);
-      socket.off("disconnect", handleDisconnect);
+      socket.off("connect", onConnect);
+      socket.off("disconnect", onDisconnect);
       socket.off("newMessage", handleNewMessage);
       socket.off("messageDeleted", handleDeletedMessage);
-      socket.off("messagesSeen", handleMessagesSeen);
-      socket.off("typing", handleTypingEvent);
-      socket.off("stopTyping", handleStopTypingEvent);
-      socket.off("messageEdited", handleMessageEdited);
+      socket.off("typing");
+      socket.off("stopTyping");
+      socket.off("messageEdited");
       clearTimeout(typingTimeoutRef.current);
     };
-  }, [
-    handleConnect,
-    handleDisconnect,
-    handleNewMessage,
-    handleDeletedMessage,
-    handleMessagesSeen,
-    handleTypingEvent,
-    handleStopTypingEvent,
-    handleMessageEdited,
-  ]);
+  }, [user?._id, userId, dispatch, handleNewMessage, handleDeletedMessage, scrollToBottom]);
 
   return {
     isTyping,
     isSocketConnected,
-    emitTyping: (isTyping) => {
-      if (isTyping) {
-        socket.emit("typing", userId);
+    emitTyping: (typing) => {
+      if (!socketRef.current) return;
+      if (typing) {
+        socketRef.current.emit("typing", userId);
       } else {
-        socket.emit("stopTyping", userId);
+        socketRef.current.emit("stopTyping", userId);
       }
     },
     stopTyping,

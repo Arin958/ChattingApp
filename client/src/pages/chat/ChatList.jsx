@@ -1,7 +1,8 @@
+// src/components/chat/ChatList.jsx
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
-import socket from "../../socket/socket";
+import { initializeSocket, getSocket } from "../../socket/socket";
 
 const API = import.meta.env.VITE_API_URL;
 
@@ -12,6 +13,7 @@ const ChatList = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
+    // Fetch users with latest messages
     const fetchUsers = async () => {
       try {
         setIsLoading(true);
@@ -30,6 +32,12 @@ const ChatList = () => {
   }, []);
 
   useEffect(() => {
+    // Initialize socket connection once
+    initializeSocket();
+    const socket = getSocket();
+    if (!socket) return;
+
+    // Handler for new messages received from socket
     const handleNewMessage = ({ senderId, message }) => {
       setUsers((prevUsers) =>
         prevUsers.map((user) =>
@@ -45,6 +53,7 @@ const ChatList = () => {
       );
     };
 
+    // Handler for marking messages seen
     const handleSeenMessages = ({ receiverId }) => {
       setUsers((prevUsers) =>
         prevUsers.map((user) =>
@@ -53,6 +62,7 @@ const ChatList = () => {
       );
     };
 
+    // Handler for deleted message updates
     const handleDeletedMessage = ({ messageId }) => {
       setUsers((prevUsers) =>
         prevUsers.map((user) => {
@@ -62,8 +72,8 @@ const ChatList = () => {
               latestMessage: {
                 ...user.latestMessage,
                 content: "Message deleted",
-                deleted: true
-              }
+                deleted: true,
+              },
             };
           }
           return user;
@@ -71,10 +81,12 @@ const ChatList = () => {
       );
     };
 
+    // Register socket listeners
     socket.on("newMessage", handleNewMessage);
     socket.on("messagesSeen", handleSeenMessages);
     socket.on("messageDeleted", handleDeletedMessage);
 
+    // Cleanup listeners on unmount
     return () => {
       socket.off("newMessage", handleNewMessage);
       socket.off("messagesSeen", handleSeenMessages);
@@ -83,6 +95,9 @@ const ChatList = () => {
   }, []);
 
   useEffect(() => {
+    const socket = getSocket();
+    if (!socket) return;
+
     const updateOnlineUsers = (onlineUserIds) => {
       setUsers((prevUsers) =>
         prevUsers.map((user) => ({
@@ -110,7 +125,8 @@ const ChatList = () => {
         )
       );
 
-      socket.emit("markMessagesSeen", { userId });
+      const socket = getSocket();
+      socket?.emit("markMessagesSeen", { userId });
 
       navigate(`/chats/${userId}`);
     } catch (err) {
@@ -121,7 +137,7 @@ const ChatList = () => {
   const formatTime = (dateString) => {
     if (!dateString) return "";
     const date = new Date(dateString);
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   };
 
   const formatDate = (dateString) => {
@@ -130,13 +146,13 @@ const ChatList = () => {
     const today = new Date();
     const yesterday = new Date(today);
     yesterday.setDate(yesterday.getDate() - 1);
-    
+
     if (date.toDateString() === today.toDateString()) {
       return formatTime(dateString);
     } else if (date.toDateString() === yesterday.toDateString()) {
       return "Yesterday";
     } else {
-      return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+      return date.toLocaleDateString([], { month: "short", day: "numeric" });
     }
   };
 
@@ -147,13 +163,15 @@ const ChatList = () => {
     return "📎 Media";
   };
 
-  const filteredUsers = [...users].sort((a, b) => {
-    const dateA = new Date(a.updatedAt || a.latestMessage?.createdAt || 0);
-    const dateB = new Date(b.updatedAt || b.latestMessage?.createdAt || 0);
-    return dateB - dateA;
-  }).filter((user) =>
-    user.username.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredUsers = [...users]
+    .sort((a, b) => {
+      const dateA = new Date(a.updatedAt || a.latestMessage?.createdAt || 0);
+      const dateB = new Date(b.updatedAt || b.latestMessage?.createdAt || 0);
+      return dateB - dateA;
+    })
+    .filter((user) =>
+      user.username.toLowerCase().includes(searchTerm.toLowerCase())
+    );
 
   return (
     <div className="flex flex-col h-full bg-white dark:bg-gray-900">
@@ -161,7 +179,7 @@ const ChatList = () => {
       <div className="p-4 border-b dark:border-gray-700">
         <h1 className="text-2xl font-bold text-gray-800 dark:text-white">Chats</h1>
       </div>
-      
+
       {/* Search Bar */}
       <div className="p-4">
         <div className="relative">
@@ -194,7 +212,9 @@ const ChatList = () => {
         {isLoading ? (
           <div className="flex flex-col items-center justify-center h-full">
             <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500 mb-4"></div>
-            <p className="text-gray-500 dark:text-gray-400">Loading conversations...</p>
+            <p className="text-gray-500 dark:text-gray-400">
+              Loading conversations...
+            </p>
           </div>
         ) : filteredUsers.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full p-8 text-center">
@@ -251,11 +271,13 @@ const ChatList = () => {
                     </span>
                   </div>
                   <div className="flex justify-between items-center mt-1">
-                    <p className={`text-sm truncate ${
-                      user.latestMessage?.deleted 
-                        ? "text-gray-400 italic dark:text-gray-500"
-                        : "text-gray-500 dark:text-gray-400"
-                    }`}>
+                    <p
+                      className={`text-sm truncate ${
+                        user.latestMessage?.deleted
+                          ? "text-gray-400 italic dark:text-gray-500"
+                          : "text-gray-500 dark:text-gray-400"
+                      }`}
+                    >
                       {getMessagePreview(user.latestMessage)}
                     </p>
                     {user.unreadCount > 0 && (

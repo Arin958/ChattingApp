@@ -11,7 +11,7 @@ import {
 } from "../Store/message/messageSlice";
 
 export const useMessageHandlers = (userId, currentChat, API) => {
- const dispatch = useDispatch();
+  const dispatch = useDispatch();
   const [newMessage, setNewMessage] = useState("");
   const [isUploading, setIsUploading] = useState(false);
   const [sendError, setSendError] = useState(null);
@@ -23,23 +23,23 @@ export const useMessageHandlers = (userId, currentChat, API) => {
     if (!file) return;
 
     // Validate file
-    const validTypes = ['image/jpeg', 'image/png', 'image/gif', 'video/mp4'];
+    const validTypes = ["image/jpeg", "image/png", "image/gif", "video/mp4"];
     const MAX_SIZE = 10 * 1024 * 1024; // 10MB
-    
+
     if (!validTypes.includes(file.type)) {
-      setSendError('Unsupported file type (only JPEG, PNG, GIF, MP4 allowed)');
+      setSendError("Unsupported file type (only JPEG, PNG, GIF, MP4 allowed)");
       return;
     }
-    
+
     if (file.size > MAX_SIZE) {
-      setSendError('File too large (max 10MB)');
+      setSendError("File too large (max 10MB)");
       return;
     }
 
     setSelectedFile(file);
 
     // Create preview
-    if (file.type.startsWith('image/')) {
+    if (file.type.startsWith("image/")) {
       const reader = new FileReader();
       reader.onload = () => setFilePreview(reader.result);
       reader.readAsDataURL(file);
@@ -58,10 +58,10 @@ export const useMessageHandlers = (userId, currentChat, API) => {
     async (e) => {
       e.preventDefault();
       setSendError(null);
-      
+
       if ((!newMessage.trim() && !selectedFile) || !currentChat?._id) {
         setSendError("Message cannot be empty");
-        return false;
+        return;
       }
 
       try {
@@ -71,27 +71,25 @@ export const useMessageHandlers = (userId, currentChat, API) => {
         if (newMessage.trim()) formData.append("content", newMessage);
         if (selectedFile) formData.append("file", selectedFile);
 
-        const response = await axios.post(`${API}/api/chat`, formData, {
-          withCredentials: true,
-          headers: {
-            'Content-Type': 'multipart/form-data',
-          },
-        });
+        // Dispatch thunk — handles both API call and Redux update
+        const resultAction = await dispatch(sendMessage(formData));
 
-        dispatch(addSocketMessage(response.data));
-        setNewMessage("");
-        setSelectedFile(null);
-        setFilePreview(null);
-        return response.data;
+        if (sendMessage.fulfilled.match(resultAction)) {
+          setNewMessage("");
+          setSelectedFile(null);
+          setFilePreview(null);
+        } else {
+          const error =
+            resultAction.payload?.message || "Failed to send message";
+          setSendError(error);
+        }
       } catch (err) {
-        const errorMsg = err.response?.data?.message || "Failed to send message";
-        setSendError(errorMsg);
-        return false;
+        setSendError("Unexpected error while sending message");
       } finally {
         setIsUploading(false);
       }
     },
-    [newMessage, selectedFile, currentChat?._id, dispatch, API]
+    [newMessage, selectedFile, currentChat?._id, dispatch]
   );
 
   const onMessageChange = useCallback((e) => {
@@ -99,38 +97,43 @@ export const useMessageHandlers = (userId, currentChat, API) => {
     setSendError(null);
   }, []);
 
- const handleDeleteMessage = useCallback(async (messageId) => {
-    try {
+  const handleDeleteMessage = useCallback(
+    async (messageId) => {
+      try {
         const response = await axios.delete(`${API}/api/chat/${messageId}`, {
-            withCredentials: true,
+          withCredentials: true,
         });
-        
+
         if (response.data.success) {
-            // Update the local state with the deleted message
-            dispatch(updateMessage({
-                id: messageId,
-                changes: {
-                    deleted: true,
-                    content: "This message was deleted",
-                    deletedBy: response.data.deletedMessage?.deletedBy || userId
-                }
-            }));
-            
-            return {
-                success: true,
-                message: "Message deleted successfully"
-            };
+          // Update the local state with the deleted message
+          dispatch(
+            updateMessage({
+              id: messageId,
+              changes: {
+                deleted: true,
+                content: "This message was deleted",
+                deletedBy: response.data.deletedMessage?.deletedBy || userId,
+              },
+            })
+          );
+
+          return {
+            success: true,
+            message: "Message deleted successfully",
+          };
         } else {
-            throw new Error(response.data.error || "Failed to delete message");
+          throw new Error(response.data.error || "Failed to delete message");
         }
-    } catch (err) {
+      } catch (err) {
         console.error("Delete message error:", err.message);
         return {
-            success: false,
-            error: err.message
+          success: false,
+          error: err.message,
         };
-    }
-}, [API, dispatch]);
+      }
+    },
+    [API, dispatch]
+  );
 
   const handleEditMessage = useCallback(
     async (messageId, newContent) => {
@@ -140,23 +143,26 @@ export const useMessageHandlers = (userId, currentChat, API) => {
           { newContent },
           { withCredentials: true }
         );
-        
-        dispatch(editMessage({ 
-          messageId, 
-          newContent,
-          updatedAt: response.data.updatedAt 
-        }));
-        
+
+        dispatch(
+          editMessage({
+            messageId,
+            newContent,
+            updatedAt: response.data.updatedAt,
+          })
+        );
+
         return {
           success: true,
-          updatedMessage: response.data
+          updatedMessage: response.data,
         };
       } catch (err) {
-        const errorMsg = err.response?.data?.message || "Failed to edit message";
+        const errorMsg =
+          err.response?.data?.message || "Failed to edit message";
         console.error("Edit message error:", errorMsg);
         return {
           success: false,
-          error: errorMsg
+          error: errorMsg,
         };
       }
     },
@@ -164,7 +170,7 @@ export const useMessageHandlers = (userId, currentChat, API) => {
   );
 
   return {
-     newMessage,
+    newMessage,
     isUploading,
     sendError,
     selectedFile,

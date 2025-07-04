@@ -1,8 +1,9 @@
-import React, { useMemo } from "react";
+// src/pages/chat/ChatRoom.jsx
+import React, { useMemo, useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { useParams } from "react-router-dom";
-import { format } from "date-fns";
-import socket from "../../socket/socket";
+
+import { initializeSocket, getSocket } from "../../socket/socket";
 
 import { useChatData } from "../../hooks/useChatData";
 import { useSocketHandlers } from "../../hooks/useSocketHandlers";
@@ -20,6 +21,11 @@ const ChatRoom = () => {
   const { messages, loading } = useSelector((state) => state.message);
   const { user } = useSelector((state) => state.auth);
   const { userId } = useParams();
+
+  // Initialize socket once on mount
+  useEffect(() => {
+    initializeSocket();
+  }, []);
 
   // Custom hooks
   const { currentChat, loadingChat } = useChatData(API);
@@ -53,11 +59,11 @@ const ChatRoom = () => {
   // Enhanced message change handler with typing indicators
   const handleMessageChange = (e) => {
     const text = e.target.value;
-    onMessageChange(e); // This handles the basic message state update
-    emitTyping(text.trim().length > 0); // This handles the typing indicators
+    onMessageChange(e); // handles updating message state
+    emitTyping(text.trim().length > 0); // emits typing indicator
   };
 
-  // Filter and sort messages
+  // Filter and sort messages relevant to this chat
   const currentMessages = useMemo(() => {
     return messages
       .filter(
@@ -68,7 +74,6 @@ const ChatRoom = () => {
       .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
   }, [messages, userId, user._id]);
 
-  // Loading states
   if (loadingChat) {
     return <LoadingSpinner />;
   }
@@ -119,21 +124,18 @@ const ChatRoom = () => {
   );
 };
 
-// Small component extracted for loading state
 const LoadingSpinner = () => (
   <div className="flex items-center justify-center h-full">
     <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-blue-500"></div>
   </div>
 );
 
-// Small component extracted for not found state
 const ChatNotFound = () => (
   <div className="flex items-center justify-center h-full">
     <div className="text-center p-6 max-w-md">
       <h3 className="text-xl font-medium text-gray-700 mb-2">Chat not found</h3>
       <p className="text-gray-500">
-        The user you're trying to chat with doesn't exist or you don't have
-        permission
+        The user you're trying to chat with doesn't exist or you don't have permission
       </p>
     </div>
   </div>
