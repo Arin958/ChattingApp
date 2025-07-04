@@ -72,7 +72,7 @@ export const useMessageHandlers = (userId, currentChat, API) => {
         if (selectedFile) formData.append("file", selectedFile);
 
         // Dispatch thunk — handles both API call and Redux update
-        const resultAction = await dispatch(sendMessage(formData));
+        const resultAction = await dispatch(sendMessage(formData)).unwrap();
 
         if (sendMessage.fulfilled.match(resultAction)) {
           setNewMessage("");
