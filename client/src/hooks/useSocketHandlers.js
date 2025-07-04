@@ -20,6 +20,7 @@ export const useSocketHandlers = (
   const [isTyping, setIsTyping] = useState(false);
   const [isSocketConnected, setIsSocketConnected] = useState(false);
   const socketRef = useRef(null);
+  const messagesRef = useRef(messages);
 
   const stopTyping = useCallback(() => {
     if (socketRef.current) {
@@ -28,6 +29,11 @@ export const useSocketHandlers = (
     setIsTyping(false);
     clearTimeout(typingTimeoutRef.current);
   }, [userId]);
+
+  useEffect(() => {
+  messagesRef.current = messages;
+}, [messages]);
+
 
   // Handle incoming new messages - simplified existence check
   const handleNewMessage = useCallback(
@@ -41,7 +47,7 @@ export const useSocketHandlers = (
       };
 
       // More lenient duplicate check
-      const isDuplicate = messages.some(m => m._id === normalizedMessage._id);
+      const isDuplicate = messagesRef.current.some(m => m._id === normalizedMessage._id);
       if (isDuplicate) return;
 
       // Add to Redux store
@@ -77,6 +83,8 @@ export const useSocketHandlers = (
       })
     );
   }, [dispatch]);
+
+
 
   // Setup all socket event listeners
   useEffect(() => {
