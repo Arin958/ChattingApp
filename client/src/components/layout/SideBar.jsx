@@ -82,9 +82,7 @@ export default function Sidebar({ mobileMenuOpen, setMobileMenuOpen }) {
         >
           <FiMessageSquare className="mr-3" />
           Chats
-          <span className="ml-auto bg-blue-500 text-white text-xs px-2 py-1 rounded-full">
-            5
-          </span>
+          
         </NavLink>
         <NavLink
           to="/groups"

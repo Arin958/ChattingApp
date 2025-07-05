@@ -1,17 +1,18 @@
+// app.js
 const express = require("express");
 require("dotenv").config();
 const cors = require("cors");
 const cookieParser = require("cookie-parser");
 const http = require("http");
-const { Server } = require("socket.io");
-const jwt = require("jsonwebtoken");
-const cookie = require("cookie");
 
 const connectDB = require("./config/db");
 const authRoutes = require("./routes/auth/authRoutes");
-const User = require("./model/User");
 const chatRoutes = require("./routes/chat/chatRoutes");
 const userRoutes = require("./routes/user/userRoutes");
+const socketAuthMiddleware = require("./middleware/socket/socketAuthMiddleware");
+const handleConnection = require("./controller/socket/connectionHandler");
+const setupTypingHandlers = require("./controller/socket/typingHandler");
+const setupUserStatusHandlers = require("./controller/socket/userStatusHandler");
 
 const app = express();
 const server = http.createServer(app);
@@ -41,6 +42,8 @@ app.use(
   })
 );
 
+
+
 // Express middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -51,7 +54,8 @@ app.use("/api/auth", authRoutes);
 app.use("/api/chat", chatRoutes);
 app.use("/api/get-users", userRoutes);
 
-// Socket.IO CORS config
+// Socket.IO setup
+const { Server } = require("socket.io");
 const io = new Server(server, {
   cors: {
     origin: function (origin, callback) {
@@ -62,76 +66,20 @@ const io = new Server(server, {
   },
 });
 
+// Socket.IO middleware
+io.use(socketAuthMiddleware);
+
+app.set('io', io); // This is crucial
+
+// Socket.IO connection handler
+io.on("connection", (socket) => {
+  handleConnection(io, socket);
+  setupTypingHandlers(io, socket);
+  setupUserStatusHandlers(socket);
+});
+
 // Connect MongoDB
 connectDB();
-
-// Socket.IO authentication middleware
-io.use(async (socket, next) => {
-  try {
-    const cookies = cookie.parse(socket.handshake.headers.cookie || "");
-    const token = cookies.token;
-    if (!token) return next(new Error("No token provided"));
-
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    socket.user = decoded;
-    next();
-  } catch (err) {
-    console.error("Socket auth error:", err.message);
-    return next(new Error("Authentication failed"));
-  }
-});
-
-// In-memory user-socket map
-const userSocketMap = new Map();
-
-io.on("connection", async (socket) => {
-  const userId = socket.user.id;
-  userSocketMap.set(userId, socket.id);
-
-   socket.join(userId);
-
-  await User.findByIdAndUpdate(userId, {
-    socketId: socket.id,
-    status: "online",
-    lastSeen: null,
-  });
-
-  console.log(`User ${userId} connected`);
-
-  const onlineUsers = await User.find({ status: "online" }).select("_id");
-  io.emit("online-users", onlineUsers.map((u) => u._id.toString()));
-
-  socket.on("get-online-users", async () => {
-    const online = await User.find({ status: "online" }).select("_id");
-    socket.emit("online-users", online.map((u) => u._id.toString()));
-  });
-
-  socket.on("typing", (receiverId) => {
-    const receiverSocketId = userSocketMap.get(receiverId);
-    if (receiverSocketId) {
-      io.to(receiverSocketId).emit("typing", userId);
-    }
-  });
-
-  socket.on("stopTyping", (receiverId) => {
-    const receiverSocketId = userSocketMap.get(receiverId);
-    if (receiverSocketId) {
-      io.to(receiverSocketId).emit("stopTyping", userId);
-    }
-  });
-
-  socket.on("disconnect", async () => {
-    userSocketMap.delete(userId);
-    await User.findByIdAndUpdate(userId, {
-      status: "offline",
-      lastSeen: new Date(),
-      socketId: null,
-    });
-    socket.broadcast.emit("user-offline", userId);
-  });
-});
-
-app.set("io", io);
 
 // Start server
 const PORT = process.env.PORT || 5000;
