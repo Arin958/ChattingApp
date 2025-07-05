@@ -5,8 +5,8 @@ import { motion } from "framer-motion";
 const Home = () => {
   const navigate = useNavigate();
   const [progress, setProgress] = useState(0);
-  const timeoutDuration = 5000; // Change to 10000 for 10-second timeout
-  const intervalDuration = 50; // Update interval (lower = smoother animation)
+  const timeoutDuration = 5000; // 5 seconds
+  const intervalDuration = 50;  // For smooth animation
 
   useEffect(() => {
     const startTime = Date.now();
@@ -22,21 +22,19 @@ const Home = () => {
         const justLoggedIn = sessionStorage.getItem("justLoggedIn");
 
         if (justLoggedIn) {
-          sessionStorage.removeItem("justLoggedIn"); 
+          sessionStorage.removeItem("justLoggedIn"); // ✅ Prevent future reloads
           navigate("/chats");
-          window.location.reload();
+          window.location.reload(); // ✅ Only refresh ONCE after login
         } else {
-          navigate("/chats"); 
+          navigate("/chats");
         }
+      } else {
+        requestAnimationFrame(updateProgress); // ✅ Continue animation loop
       }
     };
 
-    const progressInterval = requestAnimationFrame(updateProgress);
-
-    return () => {
-      cancelAnimationFrame(progressInterval);
-    };
-  }, [navigate, timeoutDuration]);
+    requestAnimationFrame(updateProgress);
+  }, [navigate]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-100 to-purple-100 flex flex-col items-center justify-center p-6">
@@ -81,7 +79,7 @@ const Home = () => {
         </div>
       </div>
 
-      {/* App Title with Typing Animation */}
+      {/* App Title */}
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
@@ -111,7 +109,7 @@ const Home = () => {
         </div>
       </motion.div>
 
-      {/* Subtle Footer */}
+      {/* Footer */}
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
