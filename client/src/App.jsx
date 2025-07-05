@@ -14,6 +14,7 @@ import Home from "./pages/Home";
 import { useDispatch, useSelector } from "react-redux";
 import { useEffect } from "react";
 import { checkAuth } from "./Store/auth/authSlice";
+import UnderDevelopment from "./pages/UnderDevelopment";
 
 function App() {
     const { isAuthenticated } = useSelector((state) => state.auth);
@@ -74,7 +75,7 @@ function App() {
           path="/groups/:groupId"
           element={
             <PrivateRoute>
-              <GroupChat />
+              <UnderDevelopment />
             </PrivateRoute>
           }
         />
@@ -90,7 +91,7 @@ function App() {
           path="/settings"
           element={
             <PrivateRoute>
-              <Settings />
+              <UnderDevelopment />
             </PrivateRoute>
           }
         />
