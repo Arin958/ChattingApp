@@ -54,7 +54,7 @@ export const useMessageHandlers = (userId, currentChat, API) => {
     setSendError(null);
   };
 
-  const handleSendMessage = useCallback(
+   const handleSendMessage = useCallback(
     async (e) => {
       e.preventDefault();
       setSendError(null);
@@ -71,25 +71,36 @@ export const useMessageHandlers = (userId, currentChat, API) => {
         if (newMessage.trim()) formData.append("content", newMessage);
         if (selectedFile) formData.append("file", selectedFile);
 
-        // Dispatch thunk — handles both API call and Redux update
-        const resultAction = await dispatch(sendMessage(formData)).unwrap();
+        // Clear the file selection immediately after adding to formData
+        const fileToSend = selectedFile;
+        setSelectedFile(null);
+        setFilePreview(null);
 
-        if (sendMessage.fulfilled.match(resultAction)) {
+        const result = await dispatch(sendMessage(formData)).unwrap();
+
+        if (result?.success) {
           setNewMessage("");
-          setSelectedFile(null);
-          setFilePreview(null);
         } else {
-          const error =
-            resultAction.payload?.message || "Failed to send message";
-          setSendError(error);
+          throw new Error(result?.error || "Failed to send message");
         }
       } catch (err) {
-        setSendError("Unexpected error while sending message");
+        console.error("Send message error:", err);
+        const errorMessage = err?.message || 
+                            err?.response?.data?.message || 
+                            err?.payload?.message || 
+                            "Failed to send message";
+        setSendError(errorMessage);
+        
+        // Revert file selection if error occurred
+        if (selectedFile) {
+          setSelectedFile(selectedFile);
+          if (filePreview) setFilePreview(filePreview);
+        }
       } finally {
         setIsUploading(false);
       }
     },
-    [newMessage, selectedFile, currentChat?._id, dispatch]
+    [newMessage, selectedFile, currentChat?._id, dispatch, filePreview]
   );
 
   const onMessageChange = useCallback((e) => {

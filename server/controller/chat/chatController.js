@@ -10,19 +10,48 @@ const mongoose = require("mongoose");
 // @access  Private
 exports.sendMessage = async (req, res) => {
   try {
-    const { receiver, content = "" } = req.body; // From FormData text fields
+    const { receiver, content = "" } = req.body;
     const sender = req.user.id;
-    const file = req.file; // From multer
+    const file = req.file;
 
     // Validate required fields
     if (!receiver) {
-      return res.status(400).json({ message: "Receiver is required" });
+      return res.status(400).json({ 
+        success: false,
+        error: "VALIDATION_ERROR",
+        message: "Receiver is required",
+        field: "receiver"
+      });
+    }
+
+    // Validate content length when no file
+    if (!file && !content.trim()) {
+      return res.status(400).json({
+        success: false,
+        error: "VALIDATION_ERROR", 
+        message: "Message content cannot be empty when no file is attached",
+        field: "content"
+      });
+    }
+
+    // Validate content length
+    if (content.length > 2000) {
+      return res.status(400).json({
+        success: false,
+        error: "VALIDATION_ERROR",
+        message: "Message content cannot exceed 2000 characters",
+        field: "content"
+      });
     }
 
     // Validate receiver exists
     const receiverUser = await User.findById(receiver);
     if (!receiverUser) {
-      return res.status(404).json({ message: "Receiver not found" });
+      return res.status(404).json({
+        success: false,
+        error: "NOT_FOUND",
+        message: "Receiver user not found"
+      });
     }
 
     let mediaUrl = null;
@@ -31,6 +60,27 @@ exports.sendMessage = async (req, res) => {
 
     // Handle file upload if present
     if (file) {
+      // Validate file size
+      if (file.size > 10 * 1024 * 1024) { // 10MB
+        return res.status(400).json({
+          success: false,
+          error: "VALIDATION_ERROR",
+          message: "File size cannot exceed 10MB",
+          field: "file"
+        });
+      }
+
+      // Validate file type
+      const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'video/mp4'];
+      if (!allowedTypes.includes(file.mimetype)) {
+        return res.status(400).json({
+          success: false,
+          error: "VALIDATION_ERROR",
+          message: "Only JPEG, PNG, GIF images and MP4 videos are allowed",
+          field: "file"
+        });
+      }
+
       try {
         const dataUri = `data:${file.mimetype};base64,${file.buffer.toString("base64")}`;
         
@@ -40,15 +90,20 @@ exports.sendMessage = async (req, res) => {
         });
 
         mediaUrl = result.secure_url;
-        mediaType = result.resource_type; // 'image', 'video', etc.
+        mediaType = result.resource_type;
 
-        // Set default content if none provided
         if (!messageContent.trim()) {
           messageContent = mediaType === "image" ? "📷 Photo" : "🎥 Video";
         }
+        
       } catch (uploadError) {
-        console.error("Upload error:", uploadError);
-        return res.status(500).json({ message: "File upload failed" });
+        console.error("Cloudinary upload error:", uploadError);
+        return res.status(500).json({
+          success: false,
+          error: "UPLOAD_FAILED",
+          message: "Failed to upload file to cloud storage",
+          details: uploadError.message
+        });
       }
     }
 
@@ -76,10 +131,45 @@ exports.sendMessage = async (req, res) => {
       io.to(senderUser.socketId).emit("newMessage", newMessage);
     }
 
-    res.status(201).json(newMessage);
+   res.status(201).json({
+  success: true,
+  data: {
+    ...newMessage.toObject(), // Convert Mongoose doc to plain object
+    _id: newMessage._id,      // Explicitly ensure _id exists
+    sender: {
+      _id: senderUser._id,
+      name: senderUser.name,
+      avatar: senderUser.avatar
+    },
+    receiver: receiver,
+    createdAt: newMessage.createdAt
+  }
+});
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Server error" });
+    console.error("Message send error:", error);
+    
+    // Handle Mongoose validation errors
+    if (error.name === 'ValidationError') {
+      const errors = Object.values(error.errors).map(err => ({
+        field: err.path,
+        message: err.message
+      }));
+      
+      return res.status(400).json({
+        success: false,
+        error: "VALIDATION_ERROR",
+        message: "Validation failed",
+        details: errors
+      });
+    }
+
+    // Handle other errors
+    res.status(500).json({
+      success: false,
+      error: "SERVER_ERROR",
+      message: "An unexpected error occurred",
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
 };
 // @desc    Get conversation between two users

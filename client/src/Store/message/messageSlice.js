@@ -24,14 +24,23 @@ export const fetchMessages = createAsyncThunk(
 
 export const sendMessage = createAsyncThunk(
   "message/sendMessage",
-  async (messageData, { rejectWithValue }) => {
+  async (formData, { rejectWithValue }) => {
     try {
-      const res = await axios.post(`${API}/api/chat`, messageData, {
+      const res = await axios.post(`${API}/api/chat`, formData, {
         withCredentials: true,
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
       });
       return res.data;
     } catch (err) {
-      return rejectWithValue(err.response?.data || err.message);
+      // Ensure we're passing the complete error response
+      console.error("API Error:", err.response?.data || err.message);
+      return rejectWithValue({
+        status: err.response?.status,
+        data: err.response?.data,
+        message: err.response?.data?.message || err.message,
+      });
     }
   }
 );
@@ -214,6 +223,10 @@ const messageSlice = createSlice({
             (a, b) => new Date(a.createdAt) - new Date(b.createdAt)
           );
         }
+      })
+      .addCase(sendMessage.rejected, (state, action) => {
+        state.error = action.payload;
+        state.loading = false;
       })
       .addCase(deleteMessage.fulfilled, (state, action) => {
         state.messages = state.messages.filter(

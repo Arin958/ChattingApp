@@ -64,15 +64,16 @@ const ChatRoom = () => {
   };
 
   // Filter and sort messages relevant to this chat
-  const currentMessages = useMemo(() => {
-    return messages
-      .filter(
-        (msg) =>
-          (msg.sender._id === userId && msg.receiver._id === user._id) ||
-          (msg.sender._id === user._id && msg.receiver._id === userId)
-      )
-      .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
-  }, [messages, userId, user._id]);
+ const currentMessages = useMemo(() => {
+  return messages
+    .filter(msg => msg?.sender?._id && msg?.receiver?._id)
+    .filter(
+      (msg) =>
+        (msg.sender._id === userId && msg.receiver._id === user._id) ||
+        (msg.sender._id === user._id && msg.receiver._id === userId)
+    )
+    .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+}, [messages, userId, user._id]);
 
   if (loadingChat) {
     return <LoadingSpinner />;
