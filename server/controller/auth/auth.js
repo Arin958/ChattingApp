@@ -170,3 +170,87 @@ exports.logout = async (req, res) => {
     });
   }
 };
+
+
+// @desc    Update user profile
+// @route   PUT /api/auth/profile
+// @access  Private
+exports.updateProfile = async (req, res) => {
+  try {
+    const { username, email, currentPassword, newPassword, bio } = req.body;
+    const user = await User.findById(req.user.id).select("+password");
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // Update basic fields
+    if (username) user.username = username;
+    if (email) user.email = email;
+    if (bio) user.bio = bio;
+
+    // Handle avatar update
+    if (req.file) {
+      const streamUpload = (buffer) => {
+        return new Promise((resolve, reject) => {
+          const stream = cloudinary.uploader.upload_stream(
+            {
+              transformation: [
+                { width: 300, height: 300, crop: "thumb", gravity: "face" },
+              ],
+            },
+            (error, result) => {
+              if (result) resolve(result);
+              else reject(error);
+            }
+          );
+          stream.end(buffer);
+        });
+      };
+
+      const result = await streamUpload(req.file.buffer);
+      user.avatar = result.secure_url;
+    }
+
+    // Handle password change
+    if (currentPassword && newPassword) {
+      if (!user.password) {
+        // For social login users who haven't set a password
+        return res.status(400).json({ 
+          message: "Please set a password first before changing it" 
+        });
+      }
+      
+      const isMatch = await user.comparePassword(currentPassword);
+      if (!isMatch) {
+        return res.status(400).json({ 
+          success: false,
+          message: "Current password is incorrect" 
+        });
+      }
+      
+      if (currentPassword === newPassword) {
+        return res.status(400).json({ 
+          success: false,
+          message: "New password must be different from current password" 
+        });
+      }
+
+      user.password = newPassword;
+    }
+
+    await user.save();
+
+    res.status(200).json({
+      success: true,
+      message: "Profile updated successfully",
+      user: user.toPublic(),
+    });
+  } catch (error) {
+    console.error("UpdateProfile Error:", error);
+    res.status(500).json({ 
+      success: false,
+      message: error.message || "Server error" 
+    });
+  }
+};

@@ -1,5 +1,5 @@
 const express = require("express");
-const { register, login, logout, getMe, checkAuth } = require("../../controller/auth/auth");
+const { register, login, logout, getMe, checkAuth, updateProfile } = require("../../controller/auth/auth");
 const { verifyToken } = require("../../middleware/verifyToken");
 const upload = require("../../middleware/upload");
 
@@ -11,5 +11,6 @@ authRoutes.post("/login", login);
 authRoutes.post("/logout", logout);
 authRoutes.get("/me", verifyToken, getMe);
 authRoutes.get("/check-auth", verifyToken, checkAuth)
+authRoutes.put("/edit-profile", verifyToken, upload.single("avatar"), updateProfile);
 
 module.exports = authRoutes

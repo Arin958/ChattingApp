@@ -79,11 +79,39 @@ export const logoutUser = createAsyncThunk(
   "auth/logoutUser",
   async (_, { rejectWithValue }) => {
     try {
-      await axios.post(`${API}/api/auth/logout`, null, { withCredentials: true });
+      await axios.post(`${API}/api/auth/logout`, null, {
+        withCredentials: true,
+      });
       return true;
     } catch (err) {
       console.log(err);
       return rejectWithValue("Logout failed");
+    }
+  }
+);
+
+export const updateProfile = createAsyncThunk(
+  'auth/updateProfile',
+  async (formData, { rejectWithValue }) => {
+    try {
+      const config = {
+        withCredentials: true,
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      };
+      
+      const { data } = await axios.put(`${API}/api/auth/edit-profile`, formData, config);
+      return data.user;
+    } catch (error) {
+      // Handle password error specifically
+      if (error.response?.data?.message?.includes('password')) {
+        return rejectWithValue({
+          field: 'password',
+          message: error.response.data.message
+        });
+      }
+      return rejectWithValue(error.response?.data?.message || error.message);
     }
   }
 );
@@ -141,6 +169,7 @@ const authSlice = createSlice({
 
       // Get Me
       .addCase(getMe.fulfilled, (state, action) => {
+        console.log(action.payload);
         state.user = action.payload;
         state.isAuthenticated = true;
       })
@@ -153,6 +182,22 @@ const authSlice = createSlice({
       .addCase(logoutUser.fulfilled, (state) => {
         state.user = null;
         state.isAuthenticated = false;
+      })
+
+      .addCase(updateProfile.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+
+      // Update Profile
+      .addCase(updateProfile.fulfilled, (state, action) => {
+        state.loading = false;
+        state.user = action.payload;
+        state.error = null;
+      })
+      .addCase(updateProfile.rejected, (state, action) => {
+        state.error = action.payload;
+        state.loading = false;
       });
   },
 });

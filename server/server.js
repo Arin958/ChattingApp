@@ -96,6 +96,8 @@ io.on("connection", async (socket) => {
     lastSeen: null,
   });
 
+  console.log(`User ${userId} connected`);
+
   const onlineUsers = await User.find({ status: "online" }).select("_id");
   io.emit("online-users", onlineUsers.map((u) => u._id.toString()));
 
