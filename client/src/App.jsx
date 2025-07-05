@@ -72,7 +72,7 @@ function App() {
           }
         />
         <Route
-          path="/groups/:groupId"
+          path="/groups"
           element={
             <PrivateRoute>
               <UnderDevelopment />
