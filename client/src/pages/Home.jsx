@@ -24,7 +24,9 @@ const Home = () => {
         if (justLoggedIn) {
           sessionStorage.removeItem("justLoggedIn"); // ✅ Prevent future reloads
           navigate("/chats");
-          window.location.reload(); // ✅ Only refresh ONCE after login
+          sessionStorage.setItem("justOpenedChat", "true");
+          window.location.reload(); // ✅ Only refres
+          // h ONCE after login
         } else {
           navigate("/chats");
         }

@@ -115,24 +115,37 @@ const ChatList = () => {
     };
   }, []);
 
-  const handleUserClick = async (userId) => {
-    try {
-      await axios.get(`${API}/api/chat/${userId}`, { withCredentials: true });
+ const handleUserClick = async (userId) => {
+  try {
+    await axios.get(`${API}/api/chat/${userId}`, { withCredentials: true });
 
-      setUsers((prevUsers) =>
-        prevUsers.map((user) =>
-          user._id === userId ? { ...user, unreadCount: 0 } : user
-        )
-      );
+    setUsers((prevUsers) =>
+      prevUsers.map((user) =>
+        user._id === userId ? { ...user, unreadCount: 0 } : user
+      )
+    );
 
-      const socket = getSocket();
-      socket?.emit("markMessagesSeen", { userId });
+    const socket = getSocket();
+    socket?.emit("markMessagesSeen", { userId });
 
-      navigate(`/chats/${userId}`);
-    } catch (err) {
-      console.error("Open chat error:", err.message);
+    // Check if we need to refresh after navigation
+    const needsRefresh = sessionStorage.getItem("justOpenedChat");
+
+    navigate(`/chats/${userId}`);
+
+    if (needsRefresh) {
+      sessionStorage.removeItem("justOpenedChat");
+      // Delay to let route change
+      setTimeout(() => {
+        window.location.reload();
+      }, 100);
     }
-  };
+
+  } catch (err) {
+    console.error("Open chat error:", err.message);
+  }
+};
+
 
   const formatTime = (dateString) => {
     if (!dateString) return "";
