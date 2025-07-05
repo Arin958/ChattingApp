@@ -60,7 +60,7 @@ export default function Login() {
     })).unwrap();
 
 
-
+    sessionStorage.setItem("justLoggedIn", "true"); 
     navigate('/');
   };
 

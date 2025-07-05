@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import React, { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { motion } from "framer-motion";
 
 const Home = () => {
   const navigate = useNavigate();
@@ -11,17 +11,23 @@ const Home = () => {
   useEffect(() => {
     const startTime = Date.now();
     const endTime = startTime + timeoutDuration;
-    
+
     const updateProgress = () => {
       const now = Date.now();
       const elapsed = now - startTime;
       const percentage = Math.min((elapsed / timeoutDuration) * 100, 100);
       setProgress(percentage);
-      
+
       if (now >= endTime) {
-        navigate('/chats');
-      } else {
-        requestAnimationFrame(updateProgress);
+        const justLoggedIn = sessionStorage.getItem("justLoggedIn");
+
+        if (justLoggedIn) {
+          sessionStorage.removeItem("justLoggedIn"); 
+          navigate("/chats");
+          window.location.reload();
+        } else {
+          navigate("/chats"); 
+        }
       }
     };
 
@@ -56,8 +62,8 @@ const Home = () => {
             strokeWidth="8"
             strokeLinecap="round"
             initial={{ strokeDashoffset: 283 }}
-            animate={{ 
-              strokeDashoffset: 283 - (283 * progress) / 100 
+            animate={{
+              strokeDashoffset: 283 - (283 * progress) / 100,
             }}
             transition={{ duration: intervalDuration / 1000 }}
             strokeDasharray="283"
@@ -65,7 +71,7 @@ const Home = () => {
           />
         </svg>
         <div className="absolute inset-0 flex items-center justify-center">
-          <motion.span 
+          <motion.span
             className="text-2xl font-bold text-indigo-600"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -96,7 +102,7 @@ const Home = () => {
                 transition={{
                   repeat: Infinity,
                   duration: 1,
-                  delay: i * 0.2
+                  delay: i * 0.2,
                 }}
                 className="w-2 h-2 bg-gray-500 rounded-full"
               />
