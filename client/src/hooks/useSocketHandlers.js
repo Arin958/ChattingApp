@@ -51,10 +51,10 @@ export const useSocketHandlers = (
 );
       if (isDuplicate) return;
 
-      // Add to Redux store
+      
       dispatch(addSocketMessage(normalizedMessage));
 
-      // Scroll logic
+      
       const shouldScroll = 
         normalizedMessage.sender._id === user._id || 
         (normalizedMessage.receiver._id === user._id && isAtBottom);

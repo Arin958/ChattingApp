@@ -23,7 +23,7 @@ const MessageBubble = ({
     if (bubbleRef.current) {
       const bubbleRect = bubbleRef.current.getBoundingClientRect();
       const spaceBelow = window.innerHeight - bubbleRect.bottom;
-      setMenuPosition(spaceBelow < 150 ? 'top' : 'bottom'); // 150px is approx menu height
+      setMenuPosition(spaceBelow < 150 ? 'top' : 'bottom'); 
     }
     
     setShowMenu(!showMenu);
@@ -45,11 +45,11 @@ const MessageBubble = ({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [isEditing]);
 
-  // Focus input when editing starts
+  
   useEffect(() => {
     if (isEditing && editInputRef.current) {
       editInputRef.current.focus();
-      // Move cursor to end
+      
       editInputRef.current.selectionStart = editInputRef.current.selectionEnd = editContent.length;
     }
   }, [isEditing]);
@@ -153,7 +153,7 @@ const MessageBubble = ({
           {isCurrentUser && (
         <div className="absolute -right-2 top-0 opacity-0 group-hover:opacity-100 transition-opacity">
           <button
-            onClick={toggleMenu}  // Use the new toggle function
+            onClick={toggleMenu}  
             className="p-1 rounded-full bg-gray-200 hover:bg-gray-300 text-gray-600 shadow-sm"
           >
             <EllipsisVerticalIcon className="w-4 h-4" />

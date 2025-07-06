@@ -9,10 +9,19 @@ build/
 client/build/
 server/build/
 
-# Environment variables
-.env
-client/.env*
-server/.env*
+# For client folder
+client/.env
+client/.env.local
+client/.env.development
+client/.env.production
+!client/.env.example
+
+# For server folder
+server/.env
+server/.env.local
+server/.env.development
+server/.env.production
+!server/.env.example
 
 # Logs
 npm-debug.log*

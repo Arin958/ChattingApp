@@ -10,7 +10,6 @@ const MessageList = ({
   onEditMessage,
   onDeleteMessage,
   messagesEndRef,
-  messagesContainerRef,
   isAtBottom,
   scrollToBottom,
 }) => {
@@ -18,7 +17,6 @@ const MessageList = ({
 
   useEffect(() => {
     if (isTyping) {
-      // Scroll to bottom when typing indicator appears
       messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     }
   }, [isTyping, messagesEndRef]);
