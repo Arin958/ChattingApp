@@ -2,6 +2,7 @@ const Message = require("../../model/Message");
 const User = require("../../model/User");
 const cloudinary = require("../../utils/cloudinary");
 const upload = require("../../middleware/upload");
+const Group = require("../../model/GroupFriends");
 
 const mongoose = require("mongoose");
 
@@ -10,16 +11,25 @@ const mongoose = require("mongoose");
 // @access  Private
 exports.sendMessage = async (req, res) => {
   try {
-    const { receiver, content = "" } = req.body;
+    const { receiver, content = "", groupId } = req.body;
     const sender = req.user.id;
     const file = req.file;
 
-    // Validate required fields
-    if (!receiver) {
+    // Validate either receiver or groupId is present, but not both
+    if (!receiver && !groupId) {
       return res.status(400).json({ 
         success: false,
         error: "VALIDATION_ERROR",
-        message: "Receiver is required",
+        message: "Either receiver (for private) or groupId (for group) is required",
+        field: "receiver"
+      });
+    }
+
+    if (receiver && groupId) {
+      return res.status(400).json({ 
+        success: false,
+        error: "VALIDATION_ERROR",
+        message: "Cannot specify both receiver and groupId",
         field: "receiver"
       });
     }
@@ -44,14 +54,35 @@ exports.sendMessage = async (req, res) => {
       });
     }
 
-    // Validate receiver exists
-    const receiverUser = await User.findById(receiver);
-    if (!receiverUser) {
-      return res.status(404).json({
-        success: false,
-        error: "NOT_FOUND",
-        message: "Receiver user not found"
-      });
+    // For private messages
+    if (receiver) {
+      // Validate receiver exists
+      const receiverUser = await User.findById(receiver);
+      if (!receiverUser) {
+        return res.status(404).json({
+          success: false,
+          error: "NOT_FOUND",
+          message: "Receiver user not found"
+        });
+      }
+    }
+
+    // For group messages
+    let group = null;
+    if (groupId) {
+      // Validate group exists and user is a member
+      group = await Group.findOne({
+        _id: groupId,
+        "members.user": sender
+      }).populate("members.user", "_id socketId");
+
+      if (!group) {
+        return res.status(403).json({
+          success: false,
+          error: "FORBIDDEN",
+          message: "Not a member of this group"
+        });
+      }
     }
 
     let mediaUrl = null;
@@ -86,7 +117,7 @@ exports.sendMessage = async (req, res) => {
         
         const result = await cloudinary.uploader.upload(dataUri, {
           resource_type: "auto",
-          folder: "chat_media",
+          folder: groupId ? "group_chat_media" : "private_chat_media",
         });
 
         mediaUrl = result.secure_url;
@@ -107,44 +138,90 @@ exports.sendMessage = async (req, res) => {
       }
     }
 
-    // Create message
-    const newMessage = await Message.create({
+    // Create message data
+    const messageData = {
       sender,
-      receiver,
       content: messageContent,
       type: mediaType,
       mediaUrl,
-    });
+    };
+
+    // Set receiver or group based on message type
+    if (receiver) {
+      messageData.receiver = receiver;
+    } else {
+      messageData.group = groupId;
+    }
+
+    // Create message
+    const newMessage = await Message.create(messageData);
 
     // Populate sender details
     await newMessage.populate("sender", "name avatar");
+    if (groupId) {
+      await newMessage.populate("group", "name");
+    }
 
     // Emit socket event
     const io = req.app.get("io");
-    const receiverSocketId = receiverUser.socketId;
-    if (receiverSocketId) {
-      io.to(receiverSocketId).emit("newMessage", newMessage);
-    }
-
     const senderUser = await User.findById(sender);
-    if (senderUser?.socketId) {
-      io.to(senderUser.socketId).emit("newMessage", newMessage);
+
+    if (receiver) {
+      // Private message logic
+      const receiverUser = await User.findById(receiver);
+      if (receiverUser?.socketId) {
+        io.to(receiverUser.socketId).emit("newMessage", newMessage);
+      }
+
+      if (senderUser?.socketId) {
+        io.to(senderUser.socketId).emit("newMessage", newMessage);
+      }
+    } else {
+      // Group message logic
+      // Update group's last message
+      await Group.findByIdAndUpdate(groupId, {
+        lastMessage: newMessage._id
+      });
+
+      // Notify all group members except sender
+      group.members.forEach(member => {
+        if (member.user._id.toString() !== sender && member.user.socketId) {
+          io.to(member.user.socketId).emit("newGroupMessage", newMessage);
+        }
+      });
+
+      // Also emit to sender if they want to see their own message immediately
+      if (senderUser?.socketId) {
+        io.to(senderUser.socketId).emit("newGroupMessage", newMessage);
+      }
     }
 
-   res.status(201).json({
-  success: true,
-  data: {
-    ...newMessage.toObject(), // Convert Mongoose doc to plain object
-    _id: newMessage._id,      // Explicitly ensure _id exists
-    sender: {
-      _id: senderUser._id,
-      name: senderUser.name,
-      avatar: senderUser.avatar
-    },
-    receiver: receiver,
-    createdAt: newMessage.createdAt
-  }
-});
+    // Prepare response
+    const responseData = {
+      ...newMessage.toObject(),
+      _id: newMessage._id,
+      sender: {
+        _id: senderUser._id,
+        name: senderUser.name,
+        avatar: senderUser.avatar
+      },
+      createdAt: newMessage.createdAt
+    };
+
+    // Add receiver or group to response based on message type
+    if (receiver) {
+      responseData.receiver = receiver;
+    } else {
+      responseData.group = {
+        _id: groupId,
+        name: newMessage.group?.name || group?.name
+      };
+    }
+
+    res.status(201).json({
+      success: true,
+      data: responseData
+    });
   } catch (error) {
     console.error("Message send error:", error);
     
@@ -230,6 +307,88 @@ exports.getConversation = async (req, res) => {
       messages: messages.reverse(), // Oldest first for chat UI
       hasMore: messages.length === limit, // Used for frontend infinite scroll
     });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+
+exports.getGroupConversation = async (req, res) => {
+  try {
+    const { groupId } = req.params;
+    
+    const currentUserId = req.user.id;
+    const limit = parseInt(req.query.limit) || 20;
+    const before = req.query.before;
+
+    // Verify user is a group member
+    const group = await Group.findOne({
+      _id: groupId,
+      "members.user": currentUserId
+    });
+
+    if (!group) {
+      return res.status(403).json({
+        success: false,
+        error: "FORBIDDEN",
+        message: "Not a member of this group"
+      });
+    }
+
+    // Build query
+    const query = {
+      group: groupId,
+      deletedFor: { $ne: currentUserId }
+    };
+
+    if (before) {
+      query.createdAt = { $lt: new Date(before) };
+    }
+
+    const messages = await Message.find(query)
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .populate("sender", "name avatar")
+      .populate("group", "name avatar");
+
+    // Mark messages as seen
+    await Message.updateMany(
+      {
+        group: groupId,
+        sender: { $ne: currentUserId },
+        seen: false
+      },
+      {
+        seen: true,
+        seenAt: new Date()
+      }
+    );
+
+    // Notify group members
+    const io = req.app.get("io");
+    group.members.forEach(member => {
+      if (member.user.toString() !== currentUserId && member.user.socketId) {
+        io.to(member.user.socketId).emit("groupMessagesSeen", {
+          groupId,
+          seenBy: currentUserId
+        });
+      }
+    });
+
+   res.json({
+  success: true,
+  messages: messages.reverse(),
+  hasMore: messages.length === limit,
+  group: {  // Add this group object
+    _id: group._id,
+    name: group.name,
+    avatar: group.avatar,
+    members: group.members,
+    lastMessage: group.lastMessage,
+    createdAt: group.createdAt
+  }
+});
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Server error" });

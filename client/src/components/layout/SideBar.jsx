@@ -7,27 +7,39 @@ import {
   FiUser,
   FiSearch,
 } from "react-icons/fi";
-import { BsThreeDotsVertical } from "react-icons/bs";
+import { BsPeople, BsThreeDotsVertical } from "react-icons/bs";
 import { motion, AnimatePresence } from "framer-motion";
 import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { getMe, logoutUser } from "../../Store/auth/authSlice";
 import { persistor } from "../../Store/store";
 import { Link } from "react-router-dom";
+import { FaUserFriends } from "react-icons/fa";
+import { getFriendRequests } from "../../Store/User/friendSlice";
 
 export default function Sidebar({ mobileMenuOpen, setMobileMenuOpen }) {
+  const dispatch = useDispatch()
   const [searchOpen, setSearchOpen] = useState(false);
   const [showProfileDropdown, setShowProfileDropdown] = useState(false);
   const { user } = useSelector((state) => state.auth);
+  const { receivedRequests } = useSelector((state) => state.friendRequests);
+
+  const receivedLength = receivedRequests?.receivedRequests?.length
+
 
   const navigate = useNavigate();
-  const dispatch = useDispatch();
+  
 
   useEffect(() => {
     if (user) {
       dispatch(getMe());
     }
   }, [dispatch]);
+
+  
+    useEffect(() => {
+    dispatch(getFriendRequests())
+  }, [dispatch])
 
   const handleLogout = async () => {
     await dispatch(logoutUser()).unwrap();
@@ -82,7 +94,6 @@ export default function Sidebar({ mobileMenuOpen, setMobileMenuOpen }) {
         >
           <FiMessageSquare className="mr-3" />
           Chats
-          
         </NavLink>
         <NavLink
           to="/groups"
@@ -94,6 +105,30 @@ export default function Sidebar({ mobileMenuOpen, setMobileMenuOpen }) {
         >
           <FiUsers className="mr-3" />
           Groups
+        </NavLink>
+        <NavLink
+          to="/people"
+          className={({ isActive }) =>
+            `flex items-center w-full p-3 rounded-lg hover:bg-gray-100 ${
+              isActive ? "bg-blue-50 text-blue-600" : "text-gray-700"
+            }`
+          }
+        >
+          <BsPeople className="mr-3" />
+          People
+           <span>{receivedLength > 0 && <span className="bg-red-500 text-white rounded-full w-4 h-4 flex items-center justify-center">{receivedLength}</span>}</span>
+        </NavLink>
+        <NavLink
+          to="/my-friends"
+          className={({ isActive }) =>
+            `flex items-center w-full p-3 rounded-lg hover:bg-gray-100 ${
+              isActive ? "bg-blue-50 text-blue-600" : "text-gray-700"
+            }`
+          }
+        >
+          <FaUserFriends className="mr-3" />
+          My Friends
+         
         </NavLink>
       </nav>
 

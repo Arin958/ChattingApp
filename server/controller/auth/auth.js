@@ -54,6 +54,10 @@ exports.register = async (req, res) => {
       email,
       password,
       avatar: avatarUrl,
+      privacySettings: {
+        profileVisibility: "public",
+        lastSeenVisibility: "contacts",
+      },
     });
 
     const token = createToken(newUser);
@@ -75,14 +79,21 @@ exports.register = async (req, res) => {
 // @route   POST /api/auth/login
 exports.login = async (req, res) => {
   try {
-    const { email, password} = req.body;
+    const { email, password } = req.body;
 
     const user = await User.findOne({ email }).select("+password");
     if (!user) return res.status(400).json({ message: "Invalid credentials" });
 
+
+
     const isMatch = await user.comparePassword(password);
     if (!isMatch)
       return res.status(400).json({ message: "Invalid credentials" });
+
+    // Update user status
+    user.status = "online";
+    user.lastSeen = new Date();
+    await user.save();
 
     const token = createToken(user);
     res.cookie("token", token, {
@@ -103,7 +114,6 @@ exports.login = async (req, res) => {
 
 // @desc    Logout user
 // @route   POST /api/auth/logout
-
 
 // @desc    Get current logged-in user
 // @route   GET /api/auth/me
@@ -152,6 +162,11 @@ exports.getMe = async (req, res) => {
 // @route   POST /api/auth/logout
 exports.logout = async (req, res) => {
   try {
+    await User.findByIdAndUpdate(req.user.id, {
+      status: "offline",
+      lastSeen: new Date(),
+      socketId: null,
+    });
     res.clearCookie("token", {
       httpOnly: true,
       sameSite: "strict",
@@ -170,7 +185,6 @@ exports.logout = async (req, res) => {
     });
   }
 };
-
 
 // @desc    Update user profile
 // @route   PUT /api/auth/profile
@@ -216,23 +230,23 @@ exports.updateProfile = async (req, res) => {
     if (currentPassword && newPassword) {
       if (!user.password) {
         // For social login users who haven't set a password
-        return res.status(400).json({ 
-          message: "Please set a password first before changing it" 
+        return res.status(400).json({
+          message: "Please set a password first before changing it",
         });
       }
-      
+
       const isMatch = await user.comparePassword(currentPassword);
       if (!isMatch) {
-        return res.status(400).json({ 
+        return res.status(400).json({
           success: false,
-          message: "Current password is incorrect" 
+          message: "Current password is incorrect",
         });
       }
-      
+
       if (currentPassword === newPassword) {
-        return res.status(400).json({ 
+        return res.status(400).json({
           success: false,
-          message: "New password must be different from current password" 
+          message: "New password must be different from current password",
         });
       }
 
@@ -248,9 +262,11 @@ exports.updateProfile = async (req, res) => {
     });
   } catch (error) {
     console.error("UpdateProfile Error:", error);
-    res.status(500).json({ 
+    res.status(500).json({
       success: false,
-      message: error.message || "Server error" 
+      message: error.message || "Server error",
     });
   }
 };
+
+

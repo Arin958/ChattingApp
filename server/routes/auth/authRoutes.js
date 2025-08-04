@@ -8,7 +8,7 @@ const authRoutes = express.Router();
 
 authRoutes.post("/register", upload.single("avatar"), register);
 authRoutes.post("/login", login);
-authRoutes.post("/logout", logout);
+authRoutes.post("/logout",verifyToken, logout);
 authRoutes.get("/me", verifyToken, getMe);
 authRoutes.get("/check-auth", verifyToken, checkAuth)
 authRoutes.put("/edit-profile", verifyToken, upload.single("avatar"), updateProfile);

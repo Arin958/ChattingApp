@@ -12,6 +12,9 @@ const authRoutes = require("./routes/auth/authRoutes");
 const User = require("./model/User");
 const chatRoutes = require("./routes/chat/chatRoutes");
 const userRoutes = require("./routes/user/userRoutes");
+const friendRequestRoutes = require("./routes/user/friendRequestRoute");
+const getUserRoutes = require("./routes/user/getUserRoute");
+const groupRouter = require("./routes/user/groupRoutes");
 
 const app = express();
 const server = http.createServer(app);
@@ -24,9 +27,7 @@ const allowedOrigins = [
 
 const isOriginAllowed = (origin) => {
   return (
-    !origin ||
-    allowedOrigins.includes(origin) ||
-    /\.vercel\.app$/.test(origin)
+    !origin || allowedOrigins.includes(origin) || /\.vercel\.app$/.test(origin)
   );
 };
 
@@ -50,6 +51,9 @@ app.use(cookieParser());
 app.use("/api/auth", authRoutes);
 app.use("/api/chat", chatRoutes);
 app.use("/api/get-users", userRoutes);
+app.use("/api/getusers", getUserRoutes);
+app.use("/api/friend", friendRequestRoutes);
+app.use("/api/groups", groupRouter)
 
 // Socket.IO CORS config
 const io = new Server(server, {
@@ -88,7 +92,7 @@ io.on("connection", async (socket) => {
   const userId = socket.user.id;
   userSocketMap.set(userId, socket.id);
 
-   socket.join(userId);
+  socket.join(userId);
 
   await User.findByIdAndUpdate(userId, {
     socketId: socket.id,
@@ -99,11 +103,17 @@ io.on("connection", async (socket) => {
   console.log(`User ${userId} connected`);
 
   const onlineUsers = await User.find({ status: "online" }).select("_id");
-  io.emit("online-users", onlineUsers.map((u) => u._id.toString()));
+  io.emit(
+    "online-users",
+    onlineUsers.map((u) => u._id.toString())
+  );
 
   socket.on("get-online-users", async () => {
     const online = await User.find({ status: "online" }).select("_id");
-    socket.emit("online-users", online.map((u) => u._id.toString()));
+    socket.emit(
+      "online-users",
+      online.map((u) => u._id.toString())
+    );
   });
 
   socket.on("typing", (receiverId) => {

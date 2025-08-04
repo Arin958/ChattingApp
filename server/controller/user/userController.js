@@ -19,6 +19,8 @@ exports.getAllUsers = async (req, res) => {
   }
 };
 
+
+
 exports.getUsersWithLatestMessage = async (req, res) => {
   try {
     const currentUserId = req.user.id;
@@ -88,6 +90,53 @@ exports.getUserById = async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// @desc   Search users
+// @route  GET /api/auth/search
+// @access Private
+exports.searchUsers = async (req, res) => {
+  try {
+    const { q } = req.query;
+    const currectUserId = req.user.id;
+
+    if (!q || q.length < 2) {
+      return res
+        .status(400)
+        .json({ message: "Please enter at least 2 characters" });
+    }
+
+    const currentUser = await User.findById(currectUserId);
+    if (!currentUser) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const users = await User.find({
+      $or: [
+        { username: { $regex: q, $options: "i" } },
+        { email: { $regex: q, $options: "i" } },
+      ],
+      _id: { $ne: currectUserId },
+    });
+
+    const filteredUsers = users.filter((user) => {
+      if (user.privacySettings.profileVisibility === "public") return true;
+      if (user.privacySettings.profileVisibility === "contacts") {
+        return currentUser.contacts.some(
+          (c) => c.user.toString() === user._id.toString()
+        );
+      }
+      return false;
+    });
+
+    res.status(200).json({ success: true, users: filteredUsers });
+  } catch (error) {
+    console.log("SearchUsers Error:", error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Server error",
+    })
   }
 };
 

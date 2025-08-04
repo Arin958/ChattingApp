@@ -22,6 +22,25 @@ export const fetchMessages = createAsyncThunk(
   }
 );
 
+export const fetchGroupMessages = createAsyncThunk(
+  "messages/fetchGroupMessages",
+  async ({ groupId, before = null }, { rejectWithValue }) => {
+    try {
+      const params = { limit: 20 };
+      if (before) params.before = before;
+
+      const response = await axios.get(`${API}/api/chat/group/${groupId}`, {
+        withCredentials: true,
+        params,
+      });
+      console.log(response.data);
+      return response.data;
+    } catch (err) {
+      return rejectWithValue(err.response.data);
+    }
+  }
+);
+
 export const sendMessage = createAsyncThunk(
   "message/sendMessage",
   async (formData, { rejectWithValue }) => {
@@ -29,7 +48,7 @@ export const sendMessage = createAsyncThunk(
       const res = await axios.post(`${API}/api/chat`, formData, {
         withCredentials: true,
         headers: {
-          'Content-Type': 'multipart/form-data',
+          "Content-Type": "multipart/form-data",
         },
       });
       return res.data;
@@ -107,6 +126,17 @@ const messageSlice = createSlice({
   name: "message",
   initialState,
   reducers: {
+    addMessage: (state, action) => {
+      const newMessage = action.payload;
+
+      // Optional: prevent duplicate messages
+      const alreadyExists = state.messages.some(
+        (msg) => msg._id === newMessage._id
+      );
+      if (!alreadyExists) {
+        state.messages.push(newMessage);
+      }
+    },
     resetMessages: (state) => {
       state.messages = [];
       state.hasMore = true;
@@ -246,11 +276,29 @@ const messageSlice = createSlice({
         state.messages = state.messages.map((msg) =>
           msg._id === _id ? { ...msg, content, edited } : msg
         );
+      })
+      .addCase(fetchGroupMessages.pending, (state) => {
+        state.loading = true;
+      })
+      .addCase(fetchGroupMessages.fulfilled, (state, action) => {
+        state.loading = false;
+        const messages = action.payload.messages || [];
+  const existingIds = new Set(state.messages.map((m) => m._id));
+  const newMessages = messages.filter((msg) => !existingIds.has(msg._id));
+  state.messages = [...state.messages, ...newMessages].sort(
+    (a, b) => new Date(a.createdAt) - new Date(b.createdAt)
+  );
+  state.hasMore = action.payload.hasMore;
+      })
+      .addCase(fetchGroupMessages.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.error.message;
       });
   },
 });
 
 export const {
+  addMessage,
   resetMessages,
   addIncomingMessage,
   removeMessage,

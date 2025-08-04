@@ -15,9 +15,13 @@ import { useDispatch, useSelector } from "react-redux";
 import { useEffect } from "react";
 import { checkAuth } from "./Store/auth/authSlice";
 import UnderDevelopment from "./pages/UnderDevelopment";
+import UserList from "./pages/user/People";
+import MyFriends from "./pages/chat/MyFriends";
+import GroupManagement from "./pages/user/Group";
+import GroupChatRoom from "./pages/chat/GroupChatRoom";
 
 function App() {
-    const { isAuthenticated } = useSelector((state) => state.auth);
+  const { isAuthenticated } = useSelector((state) => state.auth);
   const dispatch = useDispatch();
 
   useEffect(() => {
@@ -72,10 +76,34 @@ function App() {
           }
         />
         <Route
+          path="/group/:groupId"
+          element={
+            <PrivateRoute>
+              <GroupChatRoom />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/chats/:userId"
+          element={
+            <PrivateRoute>
+              <ChatRoom />
+            </PrivateRoute>
+          }
+        />
+        <Route
           path="/groups"
           element={
             <PrivateRoute>
-              <UnderDevelopment />
+              <GroupManagement />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/people"
+          element={
+            <PrivateRoute>
+              <UserList />
             </PrivateRoute>
           }
         />
@@ -84,6 +112,14 @@ function App() {
           element={
             <PrivateRoute>
               <Profile />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/my-friends"
+          element={
+            <PrivateRoute>
+              <MyFriends />
             </PrivateRoute>
           }
         />

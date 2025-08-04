@@ -169,7 +169,7 @@ const authSlice = createSlice({
 
       // Get Me
       .addCase(getMe.fulfilled, (state, action) => {
-        console.log(action.payload);
+        
         state.user = action.payload;
         state.isAuthenticated = true;
       })

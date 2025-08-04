@@ -1,12 +1,10 @@
 import { useState, useCallback } from "react";
 import { useDispatch } from "react-redux";
-import { debounce } from "lodash";
+
 import axios from "axios";
 import {
   sendMessage,
   editMessage,
-  markMessagesAsSeen,
-  addSocketMessage,
   updateMessage,
 } from "../Store/message/messageSlice";
 
@@ -54,7 +52,7 @@ export const useMessageHandlers = (userId, currentChat, API) => {
     setSendError(null);
   };
 
-   const handleSendMessage = useCallback(
+  const handleSendMessage = useCallback(
     async (e) => {
       e.preventDefault();
       setSendError(null);
@@ -85,12 +83,13 @@ export const useMessageHandlers = (userId, currentChat, API) => {
         }
       } catch (err) {
         console.error("Send message error:", err);
-        const errorMessage = err?.message || 
-                            err?.response?.data?.message || 
-                            err?.payload?.message || 
-                            "Failed to send message";
+        const errorMessage =
+          err?.message ||
+          err?.response?.data?.message ||
+          err?.payload?.message ||
+          "Failed to send message";
         setSendError(errorMessage);
-        
+
         // Revert file selection if error occurred
         if (selectedFile) {
           setSelectedFile(selectedFile);

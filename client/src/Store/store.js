@@ -1,9 +1,12 @@
 import { configureStore } from "@reduxjs/toolkit";
 import authReducer from "./auth/authSlice";
-import messageReducer from "./message/messageSlice"
+import messageReducer from "./message/messageSlice";
+import userReducer from "./User/userSlice";
 import storage from "redux-persist/lib/storage";
 import { persistReducer, persistStore } from "redux-persist";
 import { combineReducers } from "redux";
+import friendRequestReducer from "./User/friendSlice";
+import groupReducer from "./User/groupSlice";
 
 const persistConfig = {
   key: "root",
@@ -13,7 +16,10 @@ const persistConfig = {
 
 const rootReducer = combineReducers({
   auth: authReducer,
-  message: messageReducer
+  message: messageReducer,
+  users: userReducer,
+  friendRequests: friendRequestReducer,
+  groups: groupReducer
 });
 
 const persistedReducer = persistReducer(persistConfig, rootReducer);

@@ -10,7 +10,16 @@ const messageSchema = new mongoose.Schema(
     receiver: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
-      required: true,
+      required: function () {
+        return !this.group;
+      },
+    },
+    group: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "GroupFriends",
+      required: function () {
+        return !this.receiver;
+      },
     },
     content: {
       type: String,

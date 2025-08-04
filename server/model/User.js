@@ -41,16 +41,40 @@ const userSchema = new mongoose.Schema(
     },
     contacts: [
       {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "User",
+        user: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "User",
+        },
+        addedAt: {
+          type: Date,
+          default: Date.now,
+        },
       },
     ],
     socketId: {
       type: String,
       default: null,
     },
+    blockedUsers: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+      },
+    ],
+    privacySettings: {
+      profileVisibility: {
+        type: String,
+        enum: ["public", "private", "hidden"],
+        default: "public",
+      },
+      lastSeenVisibility: {
+        type: String,
+        enum: ["everyone", "contacts", "none"],
+        default: "contacts",
+      },
+    },
   },
-  { timestamps: true }
+  { timestamps: true, toJSON: { virtuals: true }, toObject: { virtuals: true } }
 );
 
 // Pre-save hook to hash password
@@ -77,7 +101,35 @@ userSchema.methods.toPublic = function () {
   };
 };
 
-// Optional: Index for performance
+userSchema.methods.isBlocked = function (userId) {
+  return this.blockedUsers.includes(userId);
+};
+
+userSchema.methods.canReceiveFriendRequestFrom = function (userId) {
+  if (this.blockedUsers.includes(userId)) return false;
+  if (this.privacySettings.profileVisibility === "private") return false;
+  if (
+    this.privacySettings.profileVisibility === "contacts" &&
+    !this.contacts.some((c) => c.user.toString() === userId.toString())
+  ) {
+    return false;
+  }
+
+  return true;
+};
+
+userSchema.methods.addContact = async function(userId) {
+  if(!this.contacts.some(c=> c.user.toString() === userId.toString())) {
+    this.contacts.push({user: userId});
+    await this.save();
+  }
+}
+
+userSchema.methods.removeContact = async function(userId) {
+  this.contacts = this.contacts.filter(c => c.user.toString() !== userId.toString());
+  await this.save();
+}
+
 
 const User = mongoose.model("User", userSchema);
 
