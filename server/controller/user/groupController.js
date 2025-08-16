@@ -49,8 +49,8 @@ exports.createGropup = async (req, res) => {
       admins: [creatorId],
     });
 
-    await newGroup.populate("members.user", "name avatar");
-    await newGroup.populate("creator", "name avatar");
+    await newGroup.populate("members.user", "username avatar");
+    await newGroup.populate("creator", "username avatar");
 
     const io = req.app.get("io"); // Get Socket.IO instance
     validMemberIds.forEach((memberId) => {
@@ -83,8 +83,8 @@ exports.getUserGroups = async (req, res) => {
     const groups = await Group.find({
       "members.user": userId,
     })
-      .populate("creator", "name avatar")
-      .populate("members.user", "name avatar")
+      .populate("creator", "username avatar")
+      .populate("members.user", "username avatar")
       .populate("lastMessage")
       .sort({ createdAt: -1 });
 
@@ -114,8 +114,8 @@ exports.getGroupDetails = async (req, res) => {
       _id: groupId,
       "members.user": userId,
     })
-      .populate("creator", "name avatar")
-      .populate("members.user", "name avatar")
+      .populate("creator", "username avatar")
+      .populate("members.user", "username avatar")
       .populate("lastMessage");
 
     if (!group) {
@@ -250,7 +250,7 @@ exports.addGroupMembers = async (req, res) => {
     group.members.push(...newMembers);
     await group.save();
 
-    await group.populate("members.user", "name avatar");
+    await group.populate("members.user", "username avatar");
 
     const io = req.app.get("io");
     newMemberIds.forEach((memberId) => {

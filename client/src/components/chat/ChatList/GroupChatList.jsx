@@ -1,6 +1,7 @@
 import React from "react";
 import GroupListItem from "./GroupListItem";
 import EmptyState from "./EmptyState";
+import { UsersIcon } from "@heroicons/react/24/outline";
 
 const GroupChatsList = ({ groups, searchTerm }) => {
   const filteredGroups = groups
@@ -12,7 +13,7 @@ const GroupChatsList = ({ groups, searchTerm }) => {
   if (filteredGroups.length === 0) {
     return (
       <EmptyState
-        icon={<FaUsers className="h-16 w-16 text-gray-400 mb-4" />}
+        icon={<UsersIcon className="h-16 w-16 text-gray-400 mb-4" />}
         title="No groups found"
         description={
           searchTerm ? "Try a different search term" : "No groups available"

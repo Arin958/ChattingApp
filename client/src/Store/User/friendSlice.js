@@ -75,6 +75,7 @@ export const getFriendRequests = createAsyncThunk(
         `${API}/api/friend/friend-requests`,
         { withCredentials: true }
       );
+      console.log('Friend requests response:', response.data);
       return response.data;
     } catch (err) {
       return rejectWithValue(err.response?.data || err.message);
@@ -143,13 +144,13 @@ const friendRequestSlice = createSlice({
       })
       .addCase(getFriendRequests.fulfilled, (state, action) => {
       
-        state.loading = false;
-        
-        state.receivedRequests = action.payload;
-      })
-      .addCase(getFriendRequests.rejected, (state, action) => {
-        state.loading = false;
-        state.error = action.payload;
+         state.loading = false;
+  state.receivedRequests = Array.isArray(action.payload.receivedRequests)
+    ? action.payload.receivedRequests
+    : [];
+  state.sentRequests = Array.isArray(action.payload.sentRequests)
+    ? action.payload.sentRequests
+    : [];
       })
       
       // Send friend request

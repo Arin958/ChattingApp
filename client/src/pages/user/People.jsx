@@ -27,10 +27,10 @@ const UserList = () => {
   );
 
   // Fix: Access the array properly from the receivedRequests object
-  const { receivedRequests: friendRequestsState } = useSelector(
-    (state) => state.friendRequests
-  );
-  const receivedRequests = friendRequestsState.receivedRequests || [];
+  const receivedRequests =
+    useSelector((state) => state.friendRequests.receivedRequests) || [];
+
+    console.log(receivedRequests);
 
   const currentUser = useSelector((state) => state.auth.user);
 

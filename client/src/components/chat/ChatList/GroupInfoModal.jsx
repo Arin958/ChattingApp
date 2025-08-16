@@ -2,6 +2,7 @@ import React from 'react';
 import { XMarkIcon } from '@heroicons/react/24/outline';
 
 const GroupInfoModal = ({ group, members, onlineMembers, onClose, onUpdate }) => {
+  console.log(members, "members")
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <div className="bg-white dark:bg-gray-800 rounded-lg w-full max-w-md max-h-[90vh] overflow-hidden">
@@ -26,7 +27,7 @@ const GroupInfoModal = ({ group, members, onlineMembers, onClose, onUpdate }) =>
               />
             ) : (
               <div className="w-20 h-20 rounded-full bg-blue-500 flex items-center justify-center text-white text-2xl font-bold">
-                {group.name.charAt(0)}
+               {group?.name?.charAt(0) || 'G'}
               </div>
             )}
             <h2 className="text-xl font-bold text-gray-900 dark:text-white">
@@ -54,7 +55,7 @@ const GroupInfoModal = ({ group, members, onlineMembers, onClose, onUpdate }) =>
                       />
                     ) : (
                       <div className="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center text-white font-bold">
-                        {member.user.name.charAt(0)}
+                        {member?.user?.name?.charAt(0) || 'U'}
                       </div>
                     )}
                     <div>
@@ -62,7 +63,7 @@ const GroupInfoModal = ({ group, members, onlineMembers, onClose, onUpdate }) =>
                         {member.user.name}
                         {member.user._id === group.createdBy?._id && (
                           <span className="ml-2 text-xs bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 px-2 py-0.5 rounded">
-                            Admin
+                            {member.role}
                           </span>
                         )}
                       </p>
