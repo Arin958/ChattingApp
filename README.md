@@ -1,5 +1,8 @@
 # 💬 Real-Time Chat App
 
+Deployed Link: (https://chatting-app-dusky.vercel.app/login)
+Video Demo: (https://portfolio-rose-two-92.vercel.app/projects/68a1637b1f86b08b76c9c5d1)
+
 A real-time chat application built with the MERN stack that supports user authentication, private messaging, and image sharing.
 
 ---
